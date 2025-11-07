@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0" />
+<title>YouTube Player — GitHub Pages</title>
+<style>
+  :root { --ui-size: 56px; --accent: #1db954; --bg: #000; --fg: #fff; }
+  html,body { height:100%; margin:0; background:var(--bg); color:var(--fg); -webkit-font-smoothing:antialiased; }
+  #app { position:relative; width:100%; height:100vh; overflow:hidden; touch-action:none; background:#000; }
+  /* video container: the IFrame API injects an <iframe> inside #yt-player */
+  #playerWrap { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:#000; }
+  #yt-player { width:100%; height:100%; display:block; object-fit:cover; } /* player element will fill container */
+  /* overlays & UI */
+  #overlay {
+    position:absolute; inset:0; pointer-events:none;
+    display:flex; align-items:center; justify-content:center; font-family:system-ui,Arial;
+  }
+  .hud {
+    position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); pointer-events:none;
+    background:rgba(0,0,0,0.45); color:#fff; padding:6px 12px; border-radius:8px; font-size:16px; display:none;
+  }
+  #controls {
+    position:absolute; left:12px; bottom:12px; display:flex; gap:8px; pointer-events:auto;
+  }
+  .btn {
+    width:var(--ui-size); height:var(--ui-size); border-radius:12px; background:rgba(255,255,255,0.06);
+    display:flex; align-items:center; justify-content:center; color:var(--fg); border:0;
+  }
+  .fab {
+    position:absolute; right:12px; top:12px; z-index:50; pointer-events:auto;
+  }
+  #seekPreview {
+    position:absolute; bottom:50%; left:50%; transform:translate(-50%, 0%); pointer-events:none;
+    background:rgba(0,0,0,0.7); color:#fff; padding:8px 12px; border-radius:8px; display:none;
+  }
+  #brightnessOverlay {
+    position:absolute; inset:0; pointer-events:none; background:black; opacity:0; transition:opacity 0.1s linear;
+    mix-blend-mode:normal;
+  }
+  /* small top-left debug text */
+  #debug { position:absolute; left:8px; top:8px; font-size:12px; color:#ccc; z-index:60; pointer-events:none; }
+  /* aspect contain/cover switch is handled by JS toggling objectFit */
+</style>
+</head>
+<body>
+  <div id="app">
+    <div id="playerWrap">
+      <div id="yt-player"></div>
+    </div>
+
+    <div id="brightnessOverlay"></div>
+
+    <div id="overlay">
+      <div class="hud" id="hud">0:00</div>
+    </div>
+
+    <div id="seekPreview">+0s</div>
+
+    <div id="controls">
+      <button class="btn" id="btnPlay">▶︎</button>
+      <button class="btn" id="btnMute">🔇</button>
+      <button class="btn" id="btnSpeed">1×</button>
+    </div>
+
+    <div class="fab">
+      <button class="btn" id="btnAspect" title="Toggle Aspect">↔︎</button>
+    </div>
+
+    <div id="debug"></div>
+  </div>
+
+<script>
+/* ====== Config ====== */
+const DEFAULT_ID = 'dQw4w9WgXcQ';
+const SEEK_DOUBLE_TAP_SEC = 10;      // seconds for left/right double tap
+const DRAG_MAX_SEEK = 120;          // full-width drag maps to ±DRAG_MAX_SEEK seconds
+const VOLUME_STEP = 2;              // percent per small vertical motion unit
+const INITIAL_MUTED = true;         // start muted for autoplay reliability
+
+/* ====== Utility: read videoId from query string ====== */
+function getVideoIdFromQuery(){
+  const params = new URLSearchParams(location.search);
+  const id = params.get('videoId') || params.get('v') || DEFAULT_ID;
+  return id;
+}
+
+/* ====== UI refs ====== */
+const debugEl = document.getElementById('debug');
+const hud = document.getElementById('hud');
+const seekPreview = document.getElementById('seekPreview');
+const brightnessOverlay = document.getElementById('brightnessOverlay');
+const btnPlay = document.getElementById('btnPlay');
+const btnMute = document.getElementById('btnMute');
+const btnSpeed = document.getElementById('btnSpeed');
+const btnAspect = document.getElementById('btnAspect');
+const playerWrap = document.getElementById('playerWrap');
+
+let player = null;
+let videoId = getVideoIdFromQuery();
+let isMuted = INITIAL_MUTED;
+let isPlaying = false;
+let aspectModeCover = true;
+
+/* ====== IFrame API load (official) ====== */
+(function loadYouTubeAPI(){
+  const tag = document.createElement('script');
+  tag.src = "https://www.youtube.com/iframe_api";
+  document.head.appendChild(tag);
+})();
+
+/* Called by the IFrame API when ready */
+function onYouTubeIframeAPIReady() {
+  player = new YT.Player('yt-player', {
+    width: '100%',
+    height: '100%',
+    videoId: videoId,
+    playerVars: {
+      autoplay: 1,
+      controls: 1,
+      rel: 0,
+      modestbranding: 1,
+      fs: 1,
+      enablejsapi: 1,
+      mute: INITIAL_MUTED ? 1 : 0,
+      origin: window.location.origin
+    },
+    events: {
+      'onReady': onPlayerReady,
+      'onStateChange': onPlayerStateChange,
+      'onError': onPlayerError
+    }
+  });
+}
+
+/* ====== Player event handlers ====== */
+function onPlayerReady(e){
+  debug('player ready');
+  // Try to play (muted). Browsers may still block, but muted autoplay usually works.
+  try { e.target.playVideo(); } catch(e){}
+  updateUI();
+}
+
+function onPlayerStateChange(event){
+  const s = event.data; // -1 unstarted, 0 ended, 1 playing, 2 paused, 3 buffering, 5 cued
+  isPlaying = (s === 1);
+  updateUI();
+  debug('state: ' + s);
+}
+
+function onPlayerError(event){
+  const code = event.data;
+  debug('player error code: ' + code);
+  alert('Player error: ' + code + '\nCheck video restrictions or console for details.');
+}
+
+/* ====== UI helpers ====== */
+function debug(msg){ debugEl.textContent = msg; }
+function updateUI(){
+  btnPlay.textContent = isPlaying ? '❚❚' : '▶︎';
+  btnMute.textContent = isMuted ? '🔇' : '🔊';
+  // speed shown on btnSpeed
+}
+
+/* ====== Exposed control functions (useful for Android or console) ====== */
+function playVideo(){ if(player) player.playVideo(); }
+function pauseVideo(){ if(player) player.pauseVideo(); }
+function seekTo(seconds){ if(player) player.seekTo(seconds, true); }
+function getCurrentTime(){ return player ? player.getCurrentTime() : 0; }
+function getDuration(){ return player ? player.getDuration() : 0; }
+function setPlaybackRate(r){ if(player) player.setPlaybackRate(r); btnSpeed.textContent = r + '×'; }
+function mute(){ if(player){ player.mute(); isMuted = true; updateUI(); } }
+function unMute(){ if(player){ player.unMute(); isMuted = false; updateUI(); } }
+function setVolumePercent(p){ // p: 0..100
+  if(player){ player.setVolume(Math.max(0, Math.min(100, Math.round(p)))); updateUI(); }
+}
+
+/* ====== Controls wiring ====== */
+btnPlay.addEventListener('click', () => { getPlayerStateThen(s => { if(s===1) pauseVideo(); else playVideo(); }); });
+btnMute.addEventListener('click', () => { isMuted ? (unMute(), player.setVolume(50)) : (mute()); isMuted = !isMuted; updateUI(); });
+btnSpeed.addEventListener('click', () => {
+  // cycle speeds
+  getPlaybackRateThen(cur => {
+    const speeds = [1, 1.5, 2];
+    const idx = speeds.indexOf(cur) >= 0 ? speeds.indexOf(cur) : 0;
+    const next = speeds[(idx+1)%speeds.length];
+    setPlaybackRate(next);
+  });
+});
+btnAspect.addEventListener('click', () => {
+  aspectModeCover = !aspectModeCover;
+  const iframe = player && player.getIframe ? player.getIframe() : document.querySelector('#yt-player iframe');
+  if(iframe) iframe.style.objectFit = aspectModeCover ? 'cover' : 'contain';
+  btnAspect.textContent = aspectModeCover ? '↔︎' : '⬚';
+});
+
+/* small helpers to query asynchronous info */
+function getPlayerStateThen(cb){ if(!player){ cb(-2); return;} try{ cb(player.getPlayerState()); }catch(e){ cb(-2); } }
+function getCurrentTimeThen(cb){ if(!player){ cb(0); return;} try{ cb(player.getCurrentTime()); }catch(e){ cb(0); } }
+function getDurationThen(cb){ if(!player){ cb(0); return;} try{ cb(player.getDuration()); }catch(e){ cb(0); } }
+function getPlaybackRateThen(cb){ if(!player){ cb(1); return;} try{ cb(player.getPlaybackRate()); } catch(e){ cb(1); } }
+
+/* ====== Gesture handling (touch) ====== */
+let lastTap = 0;
+let lastTapX = 0;
+let lastTapY = 0;
+
+let touchActive = false;
+let startX = 0, startY = 0;
+let accDx = 0, accDy = 0;
+let seeking = false;
+let adjustType = null; // 'volume' | 'brightness' | null
+let currentVolume = 50; // 0..100 (we will track)
+let displaySeekTimeout = null;
+
+function showSeekPreview(text){
+  seekPreview.style.display = 'block';
+  seekPreview.textContent = text;
+  if(displaySeekTimeout) clearTimeout(displaySeekTimeout);
+  displaySeekTimeout = setTimeout(()=> { seekPreview.style.display='none'; }, 900);
+}
+
+function onTouchStart(e){
+  if(e.touches.length !== 1) return;
+  const t = e.touches[0];
+  touchActive = true;
+  startX = t.clientX;
+  startY = t.clientY;
+  accDx = 0; accDy = 0;
+
+  // double-tap detection
+  const now = Date.now();
+  if(now - lastTap < 300 && Math.abs(lastTapX - startX) < 60 && Math.abs(lastTapY - startY) < 60){
+    // double tap
+    const w = window.innerWidth;
+    if(startX < w * 0.33){
+      // left double-tap -> backward
+      getCurrentTimeThen(cur => { seekTo(Math.max(0, cur - SEEK_DOUBLE_TAP_SEC)); showSeekPreview(`-${SEEK_DOUBLE_TAP_SEC}s`); });
+    } else if (startX > w * 0.66){
+      // right double-tap -> forward
+      getCurrentTimeThen(cur => { seekTo(cur + SEEK_DOUBLE_TAP_SEC); showSeekPreview(`+${SEEK_DOUBLE_TAP_SEC}s`); });
+    } else {
+      // center double tap -> toggle play
+      getPlayerStateThen(s => { if(s===1) pauseVideo(); else playVideo(); });
+    }
+    lastTap = 0; // reset to avoid triple tap
+    e.preventDefault();
+    return;
+  }
+  lastTap = now; lastTapX = startX; lastTapY = startY;
+}
+
+function onTouchMove(e){
+  if(!touchActive) return;
+  const t = e.touches[0];
+  const dx = t.clientX - startX;
+  const dy = t.clientY - startY;
+  accDx = dx; accDy = dy;
+
+  const absDx = Math.abs(dx), absDy = Math.abs(dy);
+
+  // choose control mode
+  if(!seeking && !adjustType){
+    if(absDx > absDy && absDx > 12){
+      seeking = true; // horizontal seeking mode
+    } else if (absDy > absDx && absDy > 12){
+      // vertical adjust: right half => volume, left half => brightness
+      adjustType = (startX > window.innerWidth/2) ? 'volume' : 'brightness';
+    }
+  }
+
+  if(seeking){
+    // preview seconds based on dx proportion of width
+    const pct = dx / window.innerWidth; // -1..1
+    const delta = Math.round(pct * DRAG_MAX_SEEK);
+    showSeekPreview((delta > 0 ? '+' : '') + delta + 's');
+  } else if(adjustType){
+    const pct = -dy / window.innerHeight; // moving up => positive
+    if(adjustType === 'volume'){
+      // change volume progressively
+      // read current volume if possible
+      // We track currentVolume here; default 50 if unknown.
+      const change = pct * 100; // full height -> +-100
+      let v = currentVolume + change;
+      v = Math.max(0, Math.min(100, v));
+      setVolumePercent(v);
+      currentVolume = v;
+      debug('vol ' + Math.round(currentVolume));
+      hud.style.display = 'block';
+      hud.textContent = 'Volume: ' + Math.round(currentVolume) + '%';
+      clearHudAfterDelay();
+    } else {
+      // brightness: simulate by overlay opacity (0 = bright, 0.7 = dark)
+      const change = pct; // -1..1
+      // get current overlay opacity
+      const cur = parseFloat(brightnessOverlay.style.opacity) || 0;
+      let next = cur + change;
+      next = Math.max(0, Math.min(0.85, next));
+      brightnessOverlay.style.opacity = next.toFixed(2);
+      hud.style.display = 'block';
+      hud.textContent = 'Brightness: ' + Math.round((1 - next) * 100) + '%';
+      clearHudAfterDelay();
+    }
+  }
+  e.preventDefault();
+}
+
+let hudTimer = null;
+function clearHudAfterDelay(){
+  if(hudTimer) clearTimeout(hudTimer);
+  hudTimer = setTimeout(()=> { hud.style.display='none'; }, 900);
+}
+
+function onTouchEnd(e){
+  if(seeking){
+    // commit seek
+    const dx = accDx;
+    const pct = dx / window.innerWidth;
+    const delta = Math.round(pct * DRAG_MAX_SEEK);
+    getCurrentTimeThen(cur => {
+      const dest = Math.max(0, Math.min((getDuration() || 99999), Math.round(cur + delta)));
+      seekTo(dest);
+      showSeekPreview((delta>0?'+':'') + delta + 's');
+    });
+  }
+  // reset states
+  touchActive = false;
+  seeking = false;
+  adjustType = null;
+  accDx = 0; accDy = 0;
+  lastTap = 0;
+}
+
+/* hook touch events on main container */
+const app = document.getElementById('app');
+app.addEventListener('touchstart', onTouchStart, {passive:false});
+app.addEventListener('touchmove', onTouchMove, {passive:false});
+app.addEventListener('touchend', onTouchEnd, {passive:false});
+app.addEventListener('touchcancel', onTouchEnd, {passive:false});
+
+/* set initial volume / get actual when ready */
+function trySyncVolume(){
+  try {
+    if(player && player.getVolume){
+      currentVolume = player.getVolume();
+    }
+  } catch(e){}
+}
+
+/* Sync periodic UI */
+setInterval(()=> {
+  trySyncVolume();
+  // update play/pause icon from actual state
+  getPlayerStateThen(s => { isPlaying = (s===1); updateUI(); });
+  getCurrentTimeThen(t => {
+    if(player && player.getDuration){
+      const dur = Math.floor(player.getDuration() || 0);
+      const cur = Math.floor(t || 0);
+      hud.textContent = formatTime(cur) + ' / ' + formatTime(dur);
+    }
+  });
+}, 700);
+
+/* formatting */
+function formatTime(s){
+  if(!s || s<0) return '0:00';
+  s = Math.floor(s);
+  const m = Math.floor(s/60), sec = s%60;
+  return m + ':' + (sec<10?'0':'') + sec;
+}
+
+/* small helpers */
+function getDuration(){ try{ return player ? player.getDuration() : 0;}catch(e){return 0;} }
+function setVolumePercent(p){ setVolumePercentRaw(p); }
+function setVolumePercentRaw(p){
+  if(player && player.setVolume) player.setVolume(Math.round(p));
+}
+
+/* initialize UI values */
+updateUI();
+brightnessOverlay.style.opacity = '0';
+
+/* expose some things to window for debugging in console */
+window.YTplayer = { playVideo, pauseVideo, seekTo, getCurrentTime, getDuration, setPlaybackRate, mute, unMute, setVolumePercent };
+
+/* When page fully loaded, show debug */
+window.addEventListener('load', ()=> { debug('ready — videoId=' + videoId); });
+
+</script>
+</body>
+</html>
