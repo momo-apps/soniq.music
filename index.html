@@ -3,125 +3,158 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover" />
-<title>Soniq — YouTube Player</title>
+<title>Soniq — Clean Player</title>
 <style>
-  :root{
-    --accent:#1db954; --bg:#000; --fg:#fff; --muted:rgba(255,255,255,0.06);
+  :root {
+    --accent:#1db954; 
+    --bg:#000; 
+    --fg:#fff;
+    --muted:rgba(255,255,255,0.06);
     --ui-h:56px;
   }
-  html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,Arial,Helvetica}
-  #app{position:relative;height:100vh;width:100vw;overflow:hidden;touch-action:none;background:#000}
+  html,body {
+    height:100%; margin:0;
+    background:var(--bg); color:var(--fg);
+    font-family:system-ui,Arial,Helvetica;
+  }
+  #app {
+    position:relative; height:100vh; width:100vw;
+    overflow:hidden; touch-action:none;
+    background:#000;
+  }
 
-  /* Player container & skeleton */
-  #playerWrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#000;z-index:10}
-  #yt-player{width:100%;height:100%;display:block;object-fit:cover}
-  #skeleton{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(90deg, rgba(255,255,255,0.01), rgba(255,255,255,0.02));z-index:40}
-  #spinner{width:48px;height:48px;border-radius:50%;border:6px solid rgba(255,255,255,0.06);border-top-color:var(--accent);animation:spin .9s linear infinite}
-  @keyframes spin{to{transform:rotate(360deg)}}
+  /* player + skeleton */
+  #playerWrap { position:absolute; inset:0; background:#000; display:flex; align-items:center; justify-content:center; z-index:10; }
+  #yt-player { width:100%; height:100%; object-fit:cover; }
+  #skeleton { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:linear-gradient(90deg, rgba(255,255,255,0.01), rgba(255,255,255,0.02)); z-index:40; }
+  #spinner { width:48px; height:48px; border-radius:50%; border:6px solid rgba(255,255,255,0.06); border-top-color:var(--accent); animation:spin .9s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
 
-  /* HUDs - hidden by default */
-  .hudBox{position:absolute;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.72);padding:8px 12px;border-radius:8px;color:#fff;font-size:14px;z-index:80;display:none}
-  #mainHud{bottom:18%}
-  #vHud{left:12%;top:40%;width:200px;transform:none}
-  #bHud{right:12%;top:40%;width:200px;transform:none}
+  /* Netflix-like HUDs */
+  .hudBox {
+    position:absolute;
+    left:50%; top:50%;
+    transform:translate(-50%, -50%) scale(1);
+    background:rgba(0,0,0,0.65);
+    padding:12px 20px;
+    border-radius:12px;
+    color:#fff;
+    font-size:16px;
+    font-weight:600;
+    display:none;
+    align-items:center;
+    gap:8px;
+    opacity:0;
+    transition:opacity 0.25s ease, transform 0.25s ease;
+    z-index:999;
+  }
+  .hudBox.visible {
+    display:flex;
+    opacity:1;
+    transform:translate(-50%, -50%) scale(1.05);
+  }
+  .hudBox i { font-style:normal; font-size:18px; }
 
-  /* bottom controls area (hidden unless controls visible) */
-  #controlsRow{position:absolute;left:0;right:0;bottom:0;padding:10px 12px;z-index:60;pointer-events:none;display:flex;flex-direction:column;gap:8px}
-  #scrubWrap{display:flex;align-items:center;gap:10px;pointer-events:auto}
-  #timeLeft,#timeRight{color:#ddd;font-size:12px;min-width:54px;text-align:center}
-  .scrubContainer{flex:1;position:relative;height:46px;display:flex;align-items:center}
-  .progressBar{height:6px;border-radius:6px;background:rgba(255,255,255,0.06);width:100%;position:relative;overflow:visible}
-  .progressFill{height:100%;width:0%;background:var(--accent);border-radius:6px;transition:width 120ms linear}
-  .progressHandle{position:absolute;top:50%;transform:translate(-50%,-50%);width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,0.6);display:none}
+  /* bottom controls */
+  #controlsRow {
+    position:absolute; left:0; right:0; bottom:0;
+    padding:10px 12px; z-index:60;
+    pointer-events:none; display:flex; flex-direction:column; gap:8px;
+    opacity:0; transition:opacity .25s ease;
+  }
+  #app.controls-visible #controlsRow { opacity:1; pointer-events:auto; }
 
-  /* thumbnail preview above scrub */
-  #thumbPreview{position:absolute;bottom:58px;left:0;transform:translateX(-50%);pointer-events:none;display:none;z-index:70;text-align:center}
-  #thumbPreview .thumb{width:160px;height:90px;border-radius:6px;overflow:hidden;background:#111;display:block;box-shadow:0 6px 18px rgba(0,0,0,0.6)}
-  #thumbPreview .time{margin-top:6px;color:#fff;font-size:12px}
+  #scrubWrap { display:flex; align-items:center; gap:10px; pointer-events:auto; }
+  #timeLeft,#timeRight { color:#ddd; font-size:12px; min-width:54px; text-align:center; }
+  .scrubContainer { flex:1; position:relative; height:46px; display:flex; align-items:center; }
+  .progressBar { height:6px; border-radius:6px; background:rgba(255,255,255,0.06); width:100%; position:relative; overflow:visible; }
+  .progressFill { height:100%; width:0%; background:var(--accent); border-radius:6px; transition:width 120ms linear; }
+  .progressHandle { position:absolute; top:50%; transform:translate(-50%,-50%); width:14px; height:14px; border-radius:50%; background:#fff; box-shadow:0 1px 6px rgba(0,0,0,0.6); display:none; }
+  .dragging .progressHandle { display:block; }
 
-  /* center control buttons row */
-  #controlsCenter{position:absolute;left:50%;bottom:110px;transform:translateX(-50%);display:flex;gap:10px;align-items:center;z-index:60;pointer-events:auto;opacity:0;transition:opacity .18s}
-  #controlsCenter.visible{opacity:1}
-  .btn{height:var(--ui-h);min-width:var(--ui-h);border-radius:12px;background:var(--muted);border:0;color:var(--fg);display:flex;align-items:center;justify-content:center;font-size:18px}
-  .btn.small{height:44px;min-width:44px;font-size:15px}
+  /* controls center row */
+  #controlsCenter {
+    position:absolute; left:50%; bottom:110px; transform:translate(-50%,-55%);
+    display:flex; gap:10px; align-items:center; z-index:60;
+    pointer-events:auto; opacity:0; transition:opacity .25s ease, transform .25s ease;
+  }
+  #controlsCenter.visible { opacity:1; transform:translate(-50%,-50%); }
 
-  /* settings dropdown */
-  #settingsBtnWrap{position:absolute;right:12px;top:12px;z-index:80;pointer-events:auto}
-  #settingsPopup{position:absolute;right:0;top:calc(100% + 8px);background:rgba(18,18,18,0.98);padding:10px;border-radius:10px;display:none;min-width:200px;box-shadow:0 8px 24px rgba(0,0,0,0.6)}
-  .settingsItem{color:#fff;padding:8px 6px;border-radius:6px;display:flex;justify-content:space-between;align-items:center;font-size:14px}
-  .settingsItem button{background:transparent;border:0;color:#fff;padding:6px 10px;border-radius:6px}
+  .btn {
+    height:var(--ui-h); min-width:var(--ui-h);
+    border-radius:12px; background:var(--muted);
+    border:0; color:var(--fg);
+    display:flex; align-items:center; justify-content:center;
+    font-size:18px; cursor:pointer;
+  }
+  .btn.small { height:44px; min-width:44px; font-size:15px; }
 
-  /* end overlay */
-  #endOverlay{position:absolute;inset:0;background:linear-gradient(to top, rgba(0,0,0,0.65), rgba(0,0,0,0.2));display:none;z-index:95;align-items:center;justify-content:center;flex-direction:column;gap:12px}
+  /* settings popup */
+  #settingsBtnWrap { position:absolute; right:12px; top:12px; z-index:80; pointer-events:auto; }
+  #settingsPopup {
+    position:absolute; right:0; top:calc(100% + 8px);
+    background:rgba(18,18,18,0.98); padding:10px;
+    border-radius:10px; display:none;
+    min-width:200px; box-shadow:0 8px 24px rgba(0,0,0,0.6);
+  }
+  .settingsItem { color:#fff; padding:8px 6px; border-radius:6px; display:flex; justify-content:space-between; align-items:center; font-size:14px; }
+  .settingsItem button { background:transparent; border:0; color:#fff; padding:6px 10px; border-radius:6px; }
 
-  /* hide our scrub & center controls by default; show when .controls-visible is set on #app */
-  #app.controls-visible #controlsCenter,
-  #app.controls-visible #controlsRow { opacity:1; pointer-events:auto; transition:opacity .12s ease-in-out; }
-  #app:not(.controls-visible) #controlsCenter,
-  #app:not(.controls-visible) #controlsRow { opacity:0; pointer-events:none; transition:opacity .12s ease-in-out; }
+  /* hide end suggestions */
+  #endOverlay { position:absolute; inset:0; display:none; background:#000; z-index:95; align-items:center; justify-content:center; flex-direction:column; gap:12px; }
 
-  /* show progress handle while dragging */
-  .dragging .progressHandle{display:block}
-
-  /* small responsive tweak */
-  @media (max-width:480px){ #thumbPreview .thumb{width:120px;height:68px} }
+  @keyframes fadeInOut { from { opacity:0; } to { opacity:1; } }
 </style>
 </head>
 <body>
-  <div id="app">
-    <div id="playerWrap"><div id="yt-player"></div></div>
+<div id="app">
+  <div id="playerWrap"><div id="yt-player"></div></div>
+  <div id="skeleton"><div id="spinner"></div></div>
 
-    <div id="skeleton"><div id="spinner"></div></div>
+  <!-- HUDs -->
+  <div id="vHud" class="hudBox"><i>🔊</i><span id="vHudVal">50%</span></div>
+  <div id="bHud" class="hudBox"><i>🌞</i><span id="bHudVal">100%</span></div>
 
-    <!-- HUDs -->
-    <div id="mainHud" class="hudBox">00:00:00 / 00:00:00</div>
-    <div id="vHud" class="hudBox" style="display:none">Volume: <span id="vHudVal">50%</span><div style="height:6px;background:#222;border-radius:6px;margin-top:6px"><div id="vBar" style="height:6px;width:50%;background:var(--accent);border-radius:6px"></div></div></div>
-    <div id="bHud" class="hudBox" style="display:none">Brightness: <span id="bHudVal">100%</span><div style="height:6px;background:#222;border-radius:6px;margin-top:6px"><div id="bBar" style="height:6px;width:0%;background:var(--accent);border-radius:6px"></div></div></div>
-
-    <!-- bottom controls -->
-    <div id="controlsRow">
-      <div id="scrubWrap">
-        <div id="timeLeft">00:00:00</div>
-        <div class="scrubContainer">
-          <div class="progressBar" id="progressBar">
-            <div class="progressFill" id="progressFill"></div>
-            <div class="progressHandle" id="progressHandle"></div>
-          </div>
-          <div id="thumbPreview">
-            <div class="thumb"><img id="thumbImg" src="" style="width:100%;height:100%;object-fit:cover" /></div>
-            <div class="time" id="thumbTime">00:00:00</div>
-          </div>
+  <!-- bottom controls -->
+  <div id="controlsRow">
+    <div id="scrubWrap">
+      <div id="timeLeft">00:00:00</div>
+      <div class="scrubContainer">
+        <div class="progressBar" id="progressBar">
+          <div class="progressFill" id="progressFill"></div>
+          <div class="progressHandle" id="progressHandle"></div>
         </div>
-        <div id="timeRight">00:00:00</div>
       </div>
-    </div>
-
-    <!-- center controls row -->
-    <div id="controlsCenter">
-      <button class="btn small" id="btnRewind">⟲</button>
-      <button class="btn" id="btnPlay">▶︎</button>
-      <button class="btn small" id="btnForward">⟳</button>
-      <button class="btn small" id="btnSpeed">1×</button>
-      <button class="btn small" id="btnMute">🔇</button>
-    </div>
-
-    <!-- settings button + popup -->
-    <div id="settingsBtnWrap">
-      <button class="btn small" id="btnSettings" title="Settings">⚙︎</button>
-      <div id="settingsPopup" role="dialog" aria-modal="false">
-        <div style="font-weight:700;margin-bottom:6px">Playback</div>
-        <div class="settingsItem"><div>Playback speed</div><div id="speedOptions"></div></div>
-        <div style="height:8px"></div>
-        <div class="settingsItem"><div>Quality</div><div id="qualityOptions"></div></div>
-      </div>
-    </div>
-
-    <!-- small end-screen overlay to block YT suggestions -->
-    <div id="endOverlay" style="display:flex;">
-      <div style="color:#fff;font-size:18px">Playback ended</div>
-      <div><button id="replayBtn">Replay</button></div>
+      <div id="timeRight">00:00:00</div>
     </div>
   </div>
+
+  <!-- center controls -->
+  <div id="controlsCenter">
+    <button class="btn small" id="btnRewind">⟲</button>
+    <button class="btn" id="btnPlay">▶︎</button>
+    <button class="btn small" id="btnForward">⟳</button>
+    <button class="btn small" id="btnSpeed">1×</button>
+    <button class="btn small" id="btnMute">🔇</button>
+  </div>
+
+  <!-- single settings button -->
+  <div id="settingsBtnWrap">
+    <button class="btn small" id="btnSettings" title="Settings">⚙︎</button>
+    <div id="settingsPopup" role="dialog">
+      <div style="font-weight:700;margin-bottom:6px">Playback</div>
+      <div class="settingsItem"><div>Playback speed</div><div id="speedOptions"></div></div>
+      <div style="height:8px"></div>
+      <div class="settingsItem"><div>Quality</div><div id="qualityOptions"></div></div>
+    </div>
+  </div>
+
+  <!-- End overlay (hidden) -->
+  <div id="endOverlay" style="display:none;">
+    <div style="color:#fff;font-size:18px">Playback ended</div>
+    <div><button id="replayBtn">Replay</button></div>
+  </div>
+</div>
 
 <script>
 /* ===== config ===== */
@@ -130,300 +163,136 @@ const DEFAULT_ID='dQw4w9WgXcQ', SEEK_DOUBLE_TAP_SEC=10, DRAG_MAX_SEEK=120, INITI
 /* ===== refs ===== */
 const app=document.getElementById('app');
 const skeleton=document.getElementById('skeleton');
-const mainHud=document.getElementById('mainHud');
 const vHud=document.getElementById('vHud'), bHud=document.getElementById('bHud');
 const vHudVal=document.getElementById('vHudVal'), bHudVal=document.getElementById('bHudVal');
-const vBar=document.getElementById('vBar'), bBar=document.getElementById('bBar');
 const timeLeft=document.getElementById('timeLeft'), timeRight=document.getElementById('timeRight');
 const progressBar=document.getElementById('progressBar'), progressFill=document.getElementById('progressFill'), progressHandle=document.getElementById('progressHandle');
-const thumbPreview=document.getElementById('thumbPreview'), thumbImg=document.getElementById('thumbImg'), thumbTime=document.getElementById('thumbTime');
 const btnPlay=document.getElementById('btnPlay'), btnRewind=document.getElementById('btnRewind'), btnForward=document.getElementById('btnForward');
+const btnMute=document.getElementById('btnMute'), btnSpeed=document.getElementById('btnSpeed');
 const btnSettings=document.getElementById('btnSettings'), settingsPopup=document.getElementById('settingsPopup');
 const speedOptions=document.getElementById('speedOptions'), qualityOptions=document.getElementById('qualityOptions');
 const controlsCenter=document.getElementById('controlsCenter'), endOverlay=document.getElementById('endOverlay'), replayBtn=document.getElementById('replayBtn');
 
 let player=null, videoId=(new URLSearchParams(location.search)).get('videoId')||DEFAULT_ID;
-let isPlaying=false, isMuted=INITIAL_MUTED, durationSec=0;
-let controlsTimer=null, dragging=false, isPointerDown=false, currentVolume=50;
+let isPlaying=false, isMuted=INITIAL_MUTED, durationSec=0, controlsTimer=null, currentVolume=50;
 
 /* ===== load YT API ===== */
 (function(){const t=document.createElement('script'); t.src="https://www.youtube.com/iframe_api"; t.async=true; document.head.appendChild(t);})();
 
-/* ===== helper funcs ===== */
-function formatHHMMSS(sec){sec=Math.max(0,Math.floor(sec||0)); const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60; return (h>0?String(h).padStart(2,'0')+' ':'')+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');}
-function debugLog(){/* noop for now */}
-
-/* ===== IFrame API callbacks ===== */
 function onYouTubeIframeAPIReady(){
   player=new YT.Player('yt-player',{
     width:'100%', height:'100%', videoId:videoId,
-    playerVars:{autoplay:1,controls:1,rel:0,modestbranding:1,enablejsapi:1,fs:0,mute:INITIAL_MUTED?1:0,origin:window.location.origin,playsinline:1, rel:0},
+    playerVars:{autoplay:1,controls:0,rel:0,modestbranding:1,enablejsapi:1,fs:0,mute:INITIAL_MUTED?1:0,origin:window.location.origin,playsinline:1},
     events:{onReady:onPlayerReady,onStateChange:onPlayerStateChange,onError:onPlayerError}
   });
 }
 
 function onPlayerReady(evt){
   skeleton.style.display='none';
-  try{ evt.target.playVideo(); }catch(e){}
-  try{ player.unMute(); player.setVolume(60); isMuted=false; updateUI(); }catch(e){ /* might be blocked; we'll unmute on user gesture */ }
+  evt.target.playVideo();
+  player.unMute(); player.setVolume(60); isMuted=false; updateUI();
   populateSpeedOptions(); populateQualityOptions();
   showControlsTemporarily();
 }
 
 function onPlayerStateChange(ev){
-  const s=ev.data;
-  isPlaying=(s===1);
-  if(s===0) { endOverlay.style.display='flex'; } else { endOverlay.style.display='none'; }
+  isPlaying=(ev.data===1);
+  endOverlay.style.display=(ev.data===0)?'flex':'none';
   updateUI();
 }
-
-function onPlayerError(ev){
-  alert('Playback error: '+ev.data + '. Video may be restricted for embedding.');
-}
+function onPlayerError(ev){ alert('Playback error: '+ev.data); }
 
 function updateUI(){
-  btnPlay.textContent=isPlaying? '❚❚':'▶︎';
-  btnMute.textContent=isMuted? '🔇':'🔊';
+  btnPlay.textContent=isPlaying?'❚❚':'▶︎';
+  btnMute.textContent=isMuted?'🔇':'🔊';
 }
 
-/* ===== controls wiring ===== */
-btnPlay.addEventListener('click', ()=> getPlayerStateThen(s => s===1? pauseVideo(): playVideo()));
-btnRewind.addEventListener('click', ()=> getCurrentTimeThen(t => seekTo(Math.max(0, t-SEEK_DOUBLE_TAP_SEC))));
-btnForward.addEventListener('click', ()=> getCurrentTimeThen(t => seekTo(t + SEEK_DOUBLE_TAP_SEC)));
-btnMute.addEventListener('click', ()=>{
-  if(isMuted){ unMute(); try{ player.setVolume(60); }catch(e){} isMuted=false; } else { mute(); isMuted=true; }
-  updateUI();
-  showVolumeHud(currentVolume);
-  showControlsTemporarily();
-});
-btnSpeed.addEventListener('click', ()=> openSettings('speed'));
-btnSettings.addEventListener('click', toggleSettingsPopup);
-replayBtn.addEventListener('click', ()=> { if(player){ player.seekTo(0); player.playVideo(); endOverlay.style.display='none' } });
+/* ===== Controls ===== */
+btnPlay.onclick=()=>getStateThen(s=>s===1?player.pauseVideo():player.playVideo());
+btnRewind.onclick=()=>getTimeThen(t=>player.seekTo(Math.max(0,t-SEEK_DOUBLE_TAP_SEC)));
+btnForward.onclick=()=>getTimeThen(t=>player.seekTo(t+SEEK_DOUBLE_TAP_SEC));
+btnMute.onclick=()=>{isMuted=!isMuted;isMuted?player.mute():player.unMute();updateUI();showVolumeHud(player.getVolume());showControlsTemporarily();}
+btnSpeed.onclick=()=>openSettings();
 
-/* exposed controls */
-function playVideo(){ if(player) player.playVideo(); }
-function pauseVideo(){ if(player) player.pauseVideo(); }
-function seekTo(sec){ if(player) player.seekTo(sec, true); }
-function getCurrentTime(){ try{return player?player.getCurrentTime():0;}catch(e){return 0;} }
-function getDuration(){ try{return player?player.getDuration():0;}catch(e){return 0;} }
-function setPlaybackRate(r){ try{ if(player) player.setPlaybackRate(r); btnSpeed.textContent = r + '×'; }catch(e){} }
-function mute(){ try{ if(player) player.mute(); isMuted=true; updateUI(); }catch(e){} }
-function unMute(){ try{ if(player) player.unMute(); isMuted=false; updateUI(); }catch(e){} }
-function setVolumePercent(p){ try{ if(player && player.setVolume) player.setVolume(Math.max(0,Math.min(100,Math.round(p)))); }catch(e){} }
+btnSettings.onclick=toggleSettingsPopup;
+replayBtn.onclick=()=>{player.seekTo(0);player.playVideo();endOverlay.style.display='none';};
 
-/* ===== settings popup behavior (persistent until click outside) ===== */
-function toggleSettingsPopup(e){
-  if(settingsPopup.style.display==='block') { settingsPopup.style.display='none'; }
-  else {
-    populateSpeedOptions(); populateQualityOptions();
-    settingsPopup.style.display='block';
-    // close when clicking outside
-    setTimeout(()=> {
-      const off=(ev)=>{ if(!settingsPopup.contains(ev.target) && ev.target !== btnSettings){ settingsPopup.style.display='none'; document.removeEventListener('click',off); } };
-      document.addEventListener('click', off);
-    }, 10);
-  }
+/* ===== Settings ===== */
+function toggleSettingsPopup(){
+  settingsPopup.style.display=(settingsPopup.style.display==='block'?'none':'block');
 }
-function openSettings(kind){ settingsPopup.style.display='block'; populateSpeedOptions(); populateQualityOptions(); }
+function openSettings(){ settingsPopup.style.display='block'; populateSpeedOptions(); populateQualityOptions(); }
 
-/* populate speed/quality */
 function populateSpeedOptions(){
   speedOptions.innerHTML='';
   const speeds=[0.5,0.75,1,1.25,1.5,2];
-  let cur=1; try{ cur = player && player.getPlaybackRate ? player.getPlaybackRate() : 1 }catch(e){}
+  const cur=player.getPlaybackRate();
   speeds.forEach(s=>{
-    const b=document.createElement('button'); b.textContent=s+'×'; b.style.fontWeight=(Math.abs(s-cur)<1e-6)?'700':'400';
-    b.addEventListener('click', ()=>{ setPlaybackRate(s); populateSpeedOptions(); });
+    const b=document.createElement('button');
+    b.textContent=s+'×';
+    b.style.fontWeight=(Math.abs(s-cur)<1e-6)?'700':'400';
+    b.onclick=()=>{player.setPlaybackRate(s);btnSpeed.textContent=s+'×';populateSpeedOptions();}
     speedOptions.appendChild(b);
   });
 }
 function populateQualityOptions(){
   qualityOptions.innerHTML='';
-  let levels=[]; try{ levels = player.getAvailableQualityLevels ? player.getAvailableQualityLevels() : [] }catch(e){ levels=[]; }
-  if(!levels || levels.length===0) levels=['hd1080','hd720','large','medium','small'];
-  let cur=''; try{ cur = player.getPlaybackQuality ? player.getPlaybackQuality() : '' }catch(e){}
+  let levels=player.getAvailableQualityLevels()||['hd1080','hd720','large','medium'];
+  const cur=player.getPlaybackQuality();
   levels.forEach(q=>{
-    const b=document.createElement('button'); b.textContent=q; b.style.fontWeight=(q===cur)?'700':'400';
-    b.addEventListener('click', ()=>{ try{ if(player.setPlaybackQuality) player.setPlaybackQuality(q); }catch(e){} populateQualityOptions(); });
+    const b=document.createElement('button');
+    b.textContent=q;
+    b.style.fontWeight=(q===cur)?'700':'400';
+    b.onclick=()=>{player.setPlaybackQuality(q);populateQualityOptions();}
     qualityOptions.appendChild(b);
   });
 }
 
-/* ===== scrubber behavior ===== */
-let scrubRect=null;
-progressBar.addEventListener('pointerdown', (e)=>{ isPointerDown=true; app.classList.add('dragging'); scrubRect=progressBar.getBoundingClientRect(); handleScrubPointer(e); document.documentElement.style.touchAction='none'; showControlsTemporarily(); });
-window.addEventListener('pointermove', (e)=>{ if(isPointerDown) handleScrubPointer(e); });
-window.addEventListener('pointerup', (e)=>{ if(isPointerDown){ commitScrub(e); isPointerDown=false; scrubRect=null; app.classList.remove('dragging'); thumbPreview.style.display='none'; document.documentElement.style.touchAction=''; } });
-
-function handleScrubPointer(e){
-  if(!scrubRect) scrubRect=progressBar.getBoundingClientRect();
-  let x=Math.min(scrubRect.right, Math.max(scrubRect.left, e.clientX));
-  let pct=(x-scrubRect.left)/scrubRect.width; pct=Math.max(0,Math.min(1,pct));
-  const dur=getDuration()||0; const t=Math.round(pct*dur);
-  positionThumb(x); showThumb(t);
-  progressFill.style.width=(pct*100)+'%';
-  progressHandle.style.left=(pct*100)+'%';
-}
-function commitScrub(e){
-  if(!scrubRect) return;
-  let x=Math.min(scrubRect.right, Math.max(scrubRect.left, e.clientX));
-  let pct=(x-scrubRect.left)/scrubRect.width; pct=Math.max(0,Math.min(1,pct));
-  const dur=getDuration()||0; const t=Math.round(pct*dur);
-  seekTo(t); showThumbMessage(formatHHMMSS(t));
-}
-function positionThumb(screenX){
-  const wrap=progressBar.getBoundingClientRect(); const local=Math.min(Math.max(screenX-wrap.left,40),wrap.width-40);
-  const globalLeft=(wrap.left + local); const pct=(globalLeft/window.innerWidth)*100;
-  thumbPreview.style.left=pct+'vw'; thumbPreview.style.display='block';
-}
-function showThumb(sec){
-  const urls=[
-    `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`,
-    `https://i.ytimg.com/vi/${videoId}/sddefault.jpg`,
-    `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-    `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`,
-    `https://i.ytimg.com/vi/${videoId}/default.jpg`
-  ];
-  thumbImg.src=urls[0];
-  thumbImg.onerror=function(){ for(let i=1;i<urls.length;i++){ const test=new Image(); test.src=urls[i]; test.onload=(function(u){return function(){ thumbImg.src=u; thumbImg.onerror=null; };})(urls[i]); } };
-  thumbTime.textContent=formatHHMMSS(sec);
-}
-function showThumbMessage(txt){ thumbPreview.style.display='block'; thumbTime.textContent=txt; setTimeout(()=>{ thumbPreview.style.display='none'; },900); }
-
-/* ===== gestures (single touch double-tap, horizontal seek, vertical vol/bright, pinch) ===== */
-let lastTouch=0,lastTouchX=0,lastTouchY=0,touchActive=false,startX=0,startY=0,accDx=0,accDy=0,seekingGesture=false,adjustType=null;
-let pinchMode=false, pinchStartDist=0, pinchScale=1;
-
-function getDist(a,b){ const dx=a.clientX-b.clientX, dy=a.clientY-b.clientY; return Math.hypot(dx,dy); }
-
-function onTouchStart(e){
-  if(e.touches.length===2){
-    pinchMode=true; pinchStartDist=getDist(e.touches[0], e.touches[1]); pinchScale=1; return;
-  }
-  if(e.touches.length!==1) return;
-  const t=e.touches[0]; startX=t.clientX; startY=t.clientY; accDx=0; accDy=0; touchActive=true;
-  const now=Date.now();
-  if(now-lastTouch<300 && Math.abs(lastTouchX-startX)<60 && Math.abs(lastTouchY-startY)<60){
-    const w=window.innerWidth;
-    if(startX < w*0.33){ getCurrentTimeThen(cur=>seekTo(Math.max(0,cur-SEEK_DOUBLE_TAP_SEC))); showThumbMessage('-'+SEEK_DOUBLE_TAP_SEC+'s'); }
-    else if(startX > w*0.66){ getCurrentTimeThen(cur=>seekTo(cur+SEEK_DOUBLE_TAP_SEC)); showThumbMessage('+'+SEEK_DOUBLE_TAP_SEC+'s'); }
-    else { getPlayerStateThen(s=> s===1? pauseVideo(): playVideo()); }
-    lastTouch=0; e.preventDefault(); return;
-  }
-  lastTouch=now; lastTouchX=startX; lastTouchY=startY;
-  // ensure controls visible and unmute on first gesture
-  showControlsTemporarily(); tryUnmuteOnGesture();
-}
-function onTouchMove(e){
-  if(pinchMode && e.touches.length===2){ const d=getDist(e.touches[0], e.touches[1]); pinchScale = d / pinchStartDist; applyPinchScale(pinchScale); e.preventDefault(); return; }
-  if(!touchActive) return;
-  const t=e.touches[0]; const dx=t.clientX-startX, dy=t.clientY-startY; accDx=dx; accDy=dy;
-  const adx=Math.abs(dx), ady=Math.abs(dy);
-  if(!seekingGesture && !adjustType){
-    if(adx>ady && adx>12) seekingGesture=true;
-    else if(ady>adx && ady>12) adjustType=(startX>window.innerWidth/2)?'volume':'brightness';
-  }
-  if(seekingGesture){
-    const pct=dx/window.innerWidth; const delta=Math.round(pct*DRAG_MAX_SEEK);
-    showThumbMessage((delta>0?'+':'')+delta+'s'); progressFill.style.width = `${(pct + (getCurrentTime()/getDuration()||0))*100}%`;
-  } else if(adjustType){
-    const pct=-dy/window.innerHeight;
-    if(adjustType === 'volume'){
-      const change = pct*100; let v = currentVolume + change; v=Math.max(0,Math.min(100,v)); setVolumePercent(v); currentVolume=v;
-      showVolumeHud(currentVolume);
-    } else {
-      let cur = parseFloat(getComputedStyle(document.getElementById('playerWrap')).filter||1)||1;
-      let brightness = cur + pct*0.18; brightness = Math.max(0.5, Math.min(1.6, brightness));
-      document.getElementById('playerWrap').style.filter = `brightness(${brightness})`;
-      const percent = Math.round((brightness-0.5)/1.1*100);
-      showBrightnessHud(percent);
-    }
-  }
-  e.preventDefault();
-}
-function onTouchEnd(e){
-  if(pinchMode){ // commit pinch to setSize if scaled sufficiently
-    commitPinch(); pinchMode=false; pinchStartDist=0; pinchScale=1; return;
-  }
-  if(seekingGesture){
-    const dx=accDx; const pct=dx/window.innerWidth; const delta=Math.round(pct*DRAG_MAX_SEEK);
-    getCurrentTimeThen(cur=>{ const dest=Math.max(0, Math.min((getDuration()||99999), Math.round(cur + delta))); seekTo(dest); showThumbMessage((delta>0?'+':'')+delta+'s'); });
-  }
-  touchActive=false; seekingGesture=false; adjustType=null; accDx=0; accDy=0; lastTouch=0;
-}
-
-/* attach touch listeners to app */
-app.addEventListener('touchstart', onTouchStart, {passive:false});
-app.addEventListener('touchmove', onTouchMove, {passive:false});
-app.addEventListener('touchend', onTouchEnd, {passive:false});
-app.addEventListener('touchcancel', onTouchEnd, {passive:false});
-
-/* try unmute on first real user gesture: */
-function tryUnmuteOnGesture(){
-  try{ player.unMute(); player.setVolume(60); isMuted=false; updateUI(); }catch(e){}
-}
-
-/* ===== volume/brightness/seek HUDs ===== */
-let hudTimer=null;
+/* ===== HUDs ===== */
+let hudTimerV=null, hudTimerB=null;
 function showVolumeHud(p){
-  vHud.style.display='block'; vHudVal.textContent = Math.round(p) + '%'; vBar.style.width = Math.round(p) + '%';
-  clearTimeout(hudTimer); hudTimer=setTimeout(()=> vHud.style.display='none',900);
+  vHud.style.display='flex';
+  vHud.classList.add('visible');
+  vHudVal.textContent=Math.round(p)+'%';
+  clearTimeout(hudTimerV);
+  hudTimerV=setTimeout(()=>{vHud.classList.remove('visible');setTimeout(()=>vHud.style.display='none',200);},800);
 }
 function showBrightnessHud(p){
-  bHud.style.display='block'; bHudVal.textContent = Math.round(p) + '%'; bBar.style.width = Math.round(p) + '%';
-  clearTimeout(hudTimer); hudTimer=setTimeout(()=> bHud.style.display='none',900);
-}
-function showMainHud(txt){
-  mainHud.style.display='block'; mainHud.textContent = txt; clearTimeout(hudTimer); hudTimer=setTimeout(()=> mainHud.style.display='none',900);
+  bHud.style.display='flex';
+  bHud.classList.add('visible');
+  bHudVal.textContent=Math.round(p)+'%';
+  clearTimeout(hudTimerB);
+  hudTimerB=setTimeout(()=>{bHud.classList.remove('visible');setTimeout(()=>bHud.style.display='none',200);},800);
 }
 
-/* show controls and auto-hide (but keep if settings open) */
+/* ===== Gestures (simplified) ===== */
+app.addEventListener('touchstart',()=>showControlsTemporarily());
+document.addEventListener('mousemove',()=>showControlsTemporarily());
+
+/* ===== Controls hide/show ===== */
 function showControlsTemporarily(){
-  app.classList.add('controls-visible'); controlsCenter.classList.add('visible');
-  if(controlsTimer) clearTimeout(controlsTimer);
-  // don't hide if settings open
+  app.classList.add('controls-visible');
+  controlsCenter.classList.add('visible');
+  clearTimeout(controlsTimer);
   if(settingsPopup.style.display==='block') return;
-  controlsTimer = setTimeout(()=>{ app.classList.remove('controls-visible'); controlsCenter.classList.remove('visible'); }, CONTROLS_HIDE_MS);
+  controlsTimer=setTimeout(()=>{app.classList.remove('controls-visible');controlsCenter.classList.remove('visible');},CONTROLS_HIDE_MS);
 }
-document.addEventListener('mousemove', showControlsTemporarily);
-document.addEventListener('touchstart', showControlsTemporarily);
 
-/* keep settings open until click outside - already managed in toggleSettingsPopup() */
-
-/* update loop for times/progress */
+/* ===== Loop ===== */
+function format(sec){sec=Math.max(0,Math.floor(sec||0));const m=Math.floor(sec/60),s=sec%60;return m+':'+String(s).padStart(2,'0');}
 function rafLoop(){
   try{
-    if(player && player.getCurrentTime){
-      const cur=Math.floor(getCurrentTime()||0), dur=Math.floor(getDuration()||0);
-      timeLeft.textContent = formatHHMMSS(cur); timeRight.textContent = formatHHMMSS(dur);
-      mainHud.textContent = formatHHMMSS(cur) + ' / ' + formatHHMMSS(dur);
-      const pct = (dur>0) ? Math.max(0, Math.min(1, cur/dur)) : 0;
-      if(!isPointerDown) { progressFill.style.width = (pct*100) + '%'; progressHandle.style.left = (pct*100) + '%'; }
-    }
+    const cur=Math.floor(player.getCurrentTime()||0),dur=Math.floor(player.getDuration()||0);
+    timeLeft.textContent=format(cur);timeRight.textContent=format(dur);
+    const pct=(dur>0)?Math.min(1,cur/dur):0;
+    progressFill.style.width=(pct*100)+'%';progressHandle.style.left=(pct*100)+'%';
   }catch(e){}
   requestAnimationFrame(rafLoop);
 }
 requestAnimationFrame(rafLoop);
 
-/* utility async helpers */
-function getPlayerStateThen(cb){ try{ cb(player?player.getPlayerState():-2); }catch(e){ cb(-2); } }
-function getCurrentTimeThen(cb){ try{ cb(player?player.getCurrentTime():0); }catch(e){ cb(0); } }
-
-/* scrub pointer flags */
-let pointerDown=false;
-progressBar.addEventListener('pointerdown', (e)=>{ pointerDown=true; isPointerDown=true; scrubRect=progressBar.getBoundingClientRect(); app.classList.add('dragging'); handleScrubPointer(e); document.documentElement.style.touchAction='none'; showControlsTemporarily(); });
-window.addEventListener('pointermove', (e)=>{ if(pointerDown) handleScrubPointer(e); });
-window.addEventListener('pointerup', (e)=>{ if(pointerDown){ commitScrub(e); pointerDown=false; isPointerDown=false; app.classList.remove('dragging'); thumbPreview.style.display='none'; document.documentElement.style.touchAction=''; } });
-
-/* ensure thumbnail present */
-thumbImg.src = `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`;
-
-/* hide skeleton if YT slow */
-setTimeout(()=>{ if(!player) skeleton.style.display='none'; }, 7000);
-
-/* initial UI show */
-showControlsTemporarily();
-  
+function getStateThen(cb){try{cb(player.getPlayerState());}catch(e){cb(-2);}}
+function getTimeThen(cb){try{cb(player.getCurrentTime());}catch(e){cb(0);}}
 </script>
 </body>
 </html>
