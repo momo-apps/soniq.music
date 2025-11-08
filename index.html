@@ -3,459 +3,193 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover" />
-<title>Soniq — Netflix-like Player</title>
+<title>Soniq — Netflix-like Player (Fixed)</title>
 <style>
   :root{
-    --accent:#e50914; --bg:#000; --fg:#fff; --muted:rgba(255,255,255,0.06); --ui-h:56px;
+    --accent:#e50914; --bg:#000; --fg:#fff; --muted:rgba(255,255,255,0.08); --ui-h:56px;
   }
-  html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
-  #app{position:relative;height:100vh;width:100vw;overflow:hidden;touch-action:none;background:#000}
-  /* Player */
-  #playerWrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#000;z-index:10}
-  #yt-player{width:100%;height:100%;display:block;object-fit:cover}
-  #skeleton{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(90deg, rgba(255,255,255,0.01), rgba(255,255,255,0.02));z-index:40}
-  #spinner{width:48px;height:48px;border-radius:50%;border:6px solid rgba(255,255,255,0.06);border-top-color:var(--accent);animation:spin .9s linear infinite}
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;}
+  #app{position:relative;height:100vh;width:100vw;overflow:hidden;touch-action:manipulation;background:#000;}
+  #playerWrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#000;z-index:10;}
+  #yt-player{width:100%;height:100%;display:block;object-fit:cover;}
+  #skeleton{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.02);z-index:40;}
+  #spinner{width:48px;height:48px;border-radius:50%;border:6px solid rgba(255,255,255,0.06);border-top-color:var(--accent);animation:spin .9s linear infinite;}
   @keyframes spin{to{transform:rotate(360deg)}}
-  /* HUDs (center overlays like Netflix) */
-  .hudBox{position:absolute;top:50%;transform:translateY(-50%);background:rgba(0,0,0,0.75);backdrop-filter:blur(10px);padding:12px 18px;border-radius:12px;color:#fff;font-size:16px;font-weight:700;display:none;align-items:center;gap:10px;z-index:999;opacity:0;transition:opacity .18s,transform .18s}
-  .hudBox.visible{display:flex;opacity:1;transform:translateY(-50%) scale(1.05)}
-  .hudBox.small{font-weight:600;font-size:14px;padding:8px 12px;border-radius:10px}
-  .hudBox.seek{left:50%;transform:translate(-50%,-50%);white-space:pre-line;text-align:center}
-  .hudIcon{font-size:20px}
-  .hudBar{width:4px;height:80px;background:rgba(255,255,255,0.2);border-radius:2px;margin-left:10px;flex-shrink:0}
-  .hudBarFill{height:50%;width:100%;background:#fff;border-radius:2px;transition:height .1s ease}
-  /* side HUDs for volume/brightness */
-  #vHud{right:20px;left:auto}
-  #bHud{left:20px;right:auto}
+
+  /* HUDs (fixed center) */
+  .hudBox{
+    position:fixed;
+    left:50%; top:50%;
+    transform:translate(-50%,-50%) scale(1);
+    background:rgba(0,0,0,0.75);
+    backdrop-filter:blur(8px);
+    padding:12px 18px;
+    border-radius:12px;
+    color:#fff;
+    font-size:16px;
+    font-weight:700;
+    display:none;
+    align-items:center;
+    gap:10px;
+    z-index:999;
+    opacity:0;
+    transition:opacity .18s,transform .18s;
+  }
+  .hudBox.visible{display:flex;opacity:1;transform:translate(-50%,-50%) scale(1.05);}
+  .hudBox.small{font-size:14px;padding:8px 12px;border-radius:10px;}
+  .hudBox.seek{white-space:pre-line;text-align:center;}
+  .hudIcon{font-size:20px;}
+  .hudBar{width:4px;height:80px;background:rgba(255,255,255,0.2);border-radius:2px;margin-left:10px;flex-shrink:0;}
+  .hudBarFill{height:50%;width:100%;background:#fff;border-radius:2px;transition:height .1s ease;}
+  #vHud{right:20px;}
+  #bHud{left:20px;}
+
   /* bottom controls */
-  #controlsRow{position:absolute;left:0;right:0;bottom:0;padding:10px 12px;z-index:60;pointer-events:none;display:flex;flex-direction:column;gap:8px;opacity:0;transition:opacity .18s}
-  #app.controls-visible #controlsRow{opacity:1;pointer-events:auto}
-  #scrubWrap{display:flex;align-items:center;gap:10px;pointer-events:auto}
-  #timeLeft,#timeRight{color:#ddd;font-size:12px;min-width:54px;text-align:center;flex-shrink:0}
-  .scrubContainer{flex:1;position:relative;height:46px;display:flex;align-items:center}
-  .progressBar{height:6px;border-radius:6px;background:rgba(255,255,255,0.06);width:100%;position:relative;overflow:visible}
-  .progressFill{height:100%;width:0%;background:var(--accent);border-radius:6px;transition:width 120ms linear}
-  .progressHandle{position:absolute;top:50%;transform:translate(-50%,-50%);width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,0.6);display:none}
-  .dragging .progressHandle{display:block}
-  /* aspect row below scrub */
-  #aspectRow{display:flex;align-items:center;gap:10px;padding:0 12px;font-size:12px;color:#999}
-  .aspect-btn{background:var(--muted);border:1px solid transparent;transition:all .2s}
-  .aspect-btn.active{background:var(--accent);color:#000;border-color:var(--accent);font-weight:600}
-  /* thumbnail preview above scrub */
-  #thumbPreview{position:absolute;bottom:58px;left:0;transform:translateX(-50%);pointer-events:none;display:none;z-index:70;text-align:center}
-  #thumbPreview .thumb{width:160px;height:90px;border-radius:6px;overflow:hidden;background:#111;display:block;box-shadow:0 6px 18px rgba(0,0,0,0.6)}
-  #thumbPreview .time{margin-top:6px;color:#fff;font-size:12px}
-  /* center controls row */
-  #controlsCenter{position:absolute;left:50%;bottom:110px;transform:translateX(-50%);display:flex;gap:10px;align-items:center;z-index:60;pointer-events:auto;opacity:0;transition:opacity .18s,transform .18s}
-  #controlsCenter.visible{opacity:1;transform:translateX(-50%) translateY(-8px)}
-  .btn{height:var(--ui-h);min-width:var(--ui-h);border-radius:12px;background:var(--muted);border:0;color:var(--fg);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;transition:all .2s}
-  .btn.small{height:44px;min-width:44px;font-size:15px}
-  .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,0.04)}
-  .btn:hover{background:rgba(255,255,255,0.1)}
+  #controlsRow{position:absolute;left:0;right:0;bottom:0;padding:10px 12px;z-index:60;pointer-events:auto;display:flex;flex-direction:column;gap:8px;opacity:0;transition:opacity .18s;}
+  #app.controls-visible #controlsRow{opacity:1;}
+  #scrubWrap{display:flex;align-items:center;gap:10px;}
+  #timeLeft,#timeRight{color:#ddd;font-size:12px;min-width:54px;text-align:center;}
+  .scrubContainer{flex:1;position:relative;height:46px;display:flex;align-items:center;}
+  .progressBar{height:6px;border-radius:6px;background:rgba(255,255,255,0.1);width:100%;position:relative;overflow:visible;}
+  .progressFill{height:100%;width:0%;background:var(--accent);border-radius:6px;transition:width 120ms linear;}
+  .progressHandle{position:absolute;top:50%;transform:translate(-50%,-50%);width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,0.6);display:none;}
+  .dragging .progressHandle{display:block;}
+
+  #thumbPreview{position:absolute;bottom:58px;left:0;transform:translateX(-50%);pointer-events:none;display:none;z-index:70;text-align:center;}
+  #thumbPreview .thumb{width:160px;height:90px;border-radius:6px;overflow:hidden;background:#111;display:block;box-shadow:0 6px 18px rgba(0,0,0,0.6);}
+  #thumbPreview .time{margin-top:6px;color:#fff;font-size:12px;}
+
+  /* center controls */
+  #controlsCenter{position:absolute;left:50%;bottom:110px;transform:translateX(-50%);display:flex;gap:10px;align-items:center;z-index:60;pointer-events:auto;opacity:0;transition:opacity .18s,transform .18s;}
+  #controlsCenter.visible{opacity:1;transform:translateX(-50%) translateY(-8px);}
+  .btn{height:var(--ui-h);min-width:var(--ui-h);border-radius:12px;background:var(--muted);border:0;color:var(--fg);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;transition:all .2s;}
+  .btn.small{height:44px;min-width:44px;font-size:15px;}
+  .btn:hover{background:rgba(255,255,255,0.12);}
+  .btn.active{background:var(--accent);color:#000;}
+
   /* settings popup */
-  #settingsBtnWrap{position:absolute;right:12px;top:12px;z-index:80;pointer-events:auto}
-  #settingsPopup{position:absolute;right:0;top:calc(100% + 8px);background:rgba(18,18,18,0.98);backdrop-filter:blur(10px);padding:16px;border-radius:12px;display:none;min-width:240px;box-shadow:0 8px 24px rgba(0,0,0,0.6);font-size:14px}
-  .settingsSection{margin-bottom:16px}
-  .settingsSection:last-child{margin-bottom:0}
-  .settingsTitle{font-weight:700;margin-bottom:8px;color:#fff}
-  .settingsItem{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.1);font-size:14px}
-  .settingsItem:last-child{border-bottom:none}
-  .settingsItem label{flex:1;color:#ccc}
-  .settingsItem .options{display:flex;gap:4px;flex-wrap:wrap}
-  .settingsItem button{background:transparent;border:0;color:#fff;padding:6px 12px;border-radius:6px;cursor:pointer;transition:all .2s;font-size:12px;white-space:nowrap}
-  .settingsItem button:hover{background:var(--muted)}
-  .settingsItem button.active{font-weight:700;color:var(--accent)}
-  .auto-info{color:#999;font-size:12px;text-align:center;padding:8px 0}
-  /* end overlay (hidden) */
-  #endOverlay{position:absolute;inset:0;background:linear-gradient(to top, rgba(0,0,0,0.65), rgba(0,0,0,0.2));display:none;z-index:95;align-items:center;justify-content:center;flex-direction:column;gap:12px}
-  @media (max-width:480px){ #thumbPreview .thumb{width:120px;height:68px} #aspectRow{gap:5px;font-size:11px} .aspect-btn{font-size:12px;padding:4px 8px} #settingsPopup{min-width:200px;padding:12px} }
+  #settingsBtnWrap{position:absolute;right:12px;top:12px;z-index:80;}
+  #settingsPopup{position:absolute;right:0;top:calc(100% + 8px);background:rgba(18,18,18,0.98);backdrop-filter:blur(10px);padding:16px;border-radius:12px;display:none;min-width:240px;box-shadow:0 8px 24px rgba(0,0,0,0.6);font-size:14px;}
+  .settingsTitle{font-weight:700;margin-bottom:8px;}
+  .settingsItem{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;}
+  .settingsItem button{background:transparent;border:0;color:#fff;padding:6px 12px;border-radius:6px;cursor:pointer;transition:all .2s;font-size:12px;}
+  .settingsItem button.active{font-weight:700;color:var(--accent);}
+  .settingsItem button:hover{background:rgba(255,255,255,0.1);}
+  #endOverlay{position:absolute;inset:0;background:rgba(0,0,0,0.6);display:none;z-index:95;align-items:center;justify-content:center;flex-direction:column;gap:12px;}
 </style>
 </head>
 <body>
   <div id="app" aria-label="Video player">
     <div id="playerWrap"><div id="yt-player"></div></div>
-    <div id="skeleton" aria-hidden="true"><div id="spinner"></div></div>
+    <div id="skeleton"><div id="spinner"></div></div>
+
     <!-- HUDs -->
     <div id="seekHud" class="hudBox seek"><span class="hudIcon" id="seekHudIcon">⟲</span><div id="seekHudText">+0s</div></div>
     <div id="vHud" class="hudBox small"><span class="hudIcon">🔊</span><span id="vHudVal">50%</span><div class="hudBar"><div class="hudBarFill"></div></div></div>
     <div id="bHud" class="hudBox small"><span class="hudIcon">🌞</span><span id="bHudVal">100%</span><div class="hudBar"><div class="hudBarFill"></div></div></div>
-    <div id="mainHud" class="hudBox small" style="display:none;opacity:0">00:00 / 00:00</div>
+
     <!-- bottom controls -->
-    <div id="controlsRow" aria-hidden="false">
+    <div id="controlsRow">
       <div id="scrubWrap">
         <div id="timeLeft">00:00:00</div>
         <div class="scrubContainer">
-          <div class="progressBar" id="progressBar" role="slider" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div class="progressBar" id="progressBar">
             <div class="progressFill" id="progressFill"></div>
-            <div class="progressHandle" id="progressHandle" aria-hidden="true"></div>
+            <div class="progressHandle" id="progressHandle"></div>
           </div>
-          <div id="thumbPreview" aria-hidden="true">
-            <div class="thumb"><img id="thumbImg" src="" style="width:100%;height:100%;object-fit:cover" /></div>
-            <div class="time" id="thumbTime">00:00:00</div>
-          </div>
+          <div id="thumbPreview"><div class="thumb"><img id="thumbImg" src="" style="width:100%;height:100%;object-fit:cover"/></div><div class="time" id="thumbTime">00:00</div></div>
         </div>
         <div id="timeRight">00:00:00</div>
       </div>
-      <div id="aspectRow">
-        <span>Aspect</span>
-        <button class="btn small aspect-btn active" data-fit="cover">Cover</button>
-        <button class="btn small aspect-btn" data-fit="fill">Fill</button>
-        <button class="btn small aspect-btn" data-fit="contain">Fit</button>
-      </div>
     </div>
+
     <!-- center controls -->
-    <div id="controlsCenter" aria-hidden="false">
-      <button class="btn small" id="btnRewind" title="Rewind 10s">⟲</button>
-      <button class="btn" id="btnPlay" title="Play/Pause">▶︎</button>
-      <button class="btn small" id="btnForward" title="Forward 10s">⟳</button>
-      <button class="btn small" id="btnSpeed" title="Playback Speed">1×</button>
-      <button class="btn small" id="btnCaptions" title="Captions">CC</button>
-      <button class="btn small" id="btnMute" title="Mute/Unmute">🔊</button>
+    <div id="controlsCenter">
+      <button class="btn small" id="btnRewind">⟲</button>
+      <button class="btn" id="btnPlay">▶︎</button>
+      <button class="btn small" id="btnForward">⟳</button>
+      <button class="btn small" id="btnSpeed">1×</button>
+      <button class="btn small" id="btnCaptions">CC</button>
+      <button class="btn small" id="btnMute">🔊</button>
     </div>
-    <!-- settings button + popup -->
+
+    <!-- settings -->
     <div id="settingsBtnWrap">
-      <button class="btn small" id="btnSettings" title="Settings">⚙︎</button>
-      <div id="settingsPopup" role="dialog" aria-modal="false">
-        <div class="settingsSection">
-          <div class="settingsTitle">Playback Speed</div>
-          <div class="settingsItem">
-            <label>Speed</label>
-            <div class="options" id="speedOptions"></div>
-          </div>
-        </div>
-        <div class="settingsSection">
-          <div class="settingsTitle">Quality</div>
-          <div class="settingsItem">
-            <label>Resolution</label>
-            <div class="auto-info">Auto (managed by YouTube)</div>
-          </div>
-        </div>
+      <button class="btn small" id="btnSettings">⚙︎</button>
+      <div id="settingsPopup">
+        <div class="settingsTitle">Playback Speed</div>
+        <div class="settingsItem" id="speedOptions"></div>
+        <div class="settingsTitle">Quality</div>
+        <div class="settingsItem" id="qualityOptions"></div>
       </div>
     </div>
-    <!-- small end-screen overlay to block YT suggestions -->
-    <div id="endOverlay" style="display:none;">
+
+    <div id="endOverlay">
       <div style="color:#fff;font-size:18px">Playback ended</div>
       <div><button id="replayBtn" class="btn">Replay</button></div>
     </div>
   </div>
+
 <script>
-/* ===== config ===== */
-const DEFAULT_ID='dQw4w9WgXcQ', SEEK_DOUBLE_TAP_SEC=10, DRAG_MAX_SEEK=120, INITIAL_MUTED=false, CONTROLS_HIDE_MS=3000;
-/* ===== refs ===== */
-const app=document.getElementById('app');
-const skeleton=document.getElementById('skeleton');
-const seekHud=document.getElementById('seekHud'), seekHudText=document.getElementById('seekHudText'), seekHudIcon=document.getElementById('seekHudIcon');
-const mainHud=document.getElementById('mainHud');
-const vHud=document.getElementById('vHud'), bHud=document.getElementById('bHud');
-const vHudVal=document.getElementById('vHudVal'), bHudVal=document.getElementById('bHudVal');
-const vBarFill=document.querySelector('#vHud .hudBarFill'), bBarFill=document.querySelector('#bHud .hudBarFill');
-const timeLeft=document.getElementById('timeLeft'), timeRight=document.getElementById('timeRight');
-const progressBar=document.getElementById('progressBar'), progressFill=document.getElementById('progressFill'), progressHandle=document.getElementById('progressHandle');
-const thumbPreview=document.getElementById('thumbPreview'), thumbImg=document.getElementById('thumbImg'), thumbTime=document.getElementById('thumbTime');
-const btnPlay=document.getElementById('btnPlay'), btnRewind=document.getElementById('btnRewind'), btnForward=document.getElementById('btnForward');
-const btnMute=document.getElementById('btnMute'), btnSpeed=document.getElementById('btnSpeed'), btnCaptions=document.getElementById('btnCaptions');
-const btnSettings=document.getElementById('btnSettings'), settingsPopup=document.getElementById('settingsPopup');
-const speedOptions=document.getElementById('speedOptions');
-const controlsCenter=document.getElementById('controlsCenter'), endOverlay=document.getElementById('endOverlay'), replayBtn=document.getElementById('replayBtn');
-const aspectBtns=document.querySelectorAll('.aspect-btn');
-let player=null, videoId=(new URLSearchParams(location.search)).get('videoId')||DEFAULT_ID;
-let isPlaying=false, isMuted=INITIAL_MUTED, durationSec=0, currentAspect='cover';
-let controlsTimer=null, dragging=false, isPointerDown=false, currentVolume=60;
-/* ===== load YT API ===== */
-(function(){const t=document.createElement('script'); t.src="https://www.youtube.com/iframe_api"; t.async=true; document.head.appendChild(t);})();
-/* ===== helper funcs ===== */
-function formatHHMMSS(sec){sec=Math.max(0,Math.floor(sec||0)); const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60; return (h>0?String(h).padStart(2,'0')+' ':'')+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');}
-function showMainHudText(txt, ms=900){ mainHud.style.display='block'; mainHud.classList.add('visible'); mainHud.textContent=txt; clearTimeout(mainHud._t); mainHud._t=setTimeout(()=>{ mainHud.classList.remove('visible'); setTimeout(()=> mainHud.style.display='none',180); }, ms); }
-function showSeekHud(delta, previewTime, dur){
-  const sign=delta>0?'+':'';
-  seekHudText.innerHTML=`${formatHHMMSS(previewTime)} / ${formatHHMMSS(dur)}<br><span style="font-size:14px;opacity:0.8">${sign}${delta}s</span>`;
-  seekHudIcon.textContent = delta>0? '⟳' : '⟲';
-  seekHud.classList.add('visible');
-  clearTimeout(seekHud._t);
-  seekHud._t=setTimeout(()=> seekHud.classList.remove('visible'),900);
-}
-function showVolumeHud(p){
-  vHudVal.textContent = Math.round(p) + '%';
-  vBarFill.style.height = p + '%';
-  vHud.classList.add('visible');
-  clearTimeout(vHud._t);
-  vHud._t=setTimeout(()=> { vHud.classList.remove('visible'); },900);
-}
-function showBrightnessHud(p, brightness){
-  bHudVal.textContent = Math.round(p) + '%';
-  bBarFill.style.height = p + '%';
-  bHud.classList.add('visible');
-  clearTimeout(bHud._t);
-  bHud._t=setTimeout(()=> { bHud.classList.remove('visible'); },900);
-}
-/* ===== YouTube IFrame API callbacks ===== */
+const DEFAULT_ID='dQw4w9WgXcQ', SEEK_DOUBLE_TAP_SEC=10, DRAG_MAX_SEEK=120, CONTROLS_HIDE_MS=3000;
+let player,isPlaying=false,isMuted=false,currentVolume=60,controlsTimer=null,touchActive=false;
+const app=document.getElementById('app'), skeleton=document.getElementById('skeleton');
+const seekHud=document.getElementById('seekHud'),seekHudText=document.getElementById('seekHudText'),seekHudIcon=document.getElementById('seekHudIcon');
+const vHud=document.getElementById('vHud'),bHud=document.getElementById('bHud'),vHudVal=document.getElementById('vHudVal'),bHudVal=document.getElementById('bHudVal');
+const vBarFill=document.querySelector('#vHud .hudBarFill'),bBarFill=document.querySelector('#bHud .hudBarFill');
+const timeLeft=document.getElementById('timeLeft'),timeRight=document.getElementById('timeRight'),progressBar=document.getElementById('progressBar');
+const progressFill=document.getElementById('progressFill'),progressHandle=document.getElementById('progressHandle');
+const btnPlay=document.getElementById('btnPlay'),btnRewind=document.getElementById('btnRewind'),btnForward=document.getElementById('btnForward');
+const btnMute=document.getElementById('btnMute'),btnSpeed=document.getElementById('btnSpeed'),btnCaptions=document.getElementById('btnCaptions');
+const btnSettings=document.getElementById('btnSettings'),settingsPopup=document.getElementById('settingsPopup'),speedOptions=document.getElementById('speedOptions'),qualityOptions=document.getElementById('qualityOptions');
+const controlsCenter=document.getElementById('controlsCenter'),endOverlay=document.getElementById('endOverlay'),replayBtn=document.getElementById('replayBtn');
+
+(function(){const s=document.createElement('script');s.src="https://www.youtube.com/iframe_api";document.head.appendChild(s);})();
 function onYouTubeIframeAPIReady(){
   player=new YT.Player('yt-player',{
-    width:'100%', height:'100%', videoId:videoId,
-    playerVars:{
-      autoplay:1,
-      controls:0,
-      rel:0,
-      modestbranding:1,
-      enablejsapi:1,
-      fs:0,
-      mute:INITIAL_MUTED?1:0,
-      origin:window.location.origin,
-      playsinline:1,
-      iv_load_policy:3,
-    },
-    events:{onReady:onPlayerReady,onStateChange:onPlayerStateChange,onError:onPlayerError}
+    videoId:DEFAULT_ID,
+    playerVars:{autoplay:1,controls:0,rel:0,modestbranding:1,playsinline:1,enablejsapi:1},
+    events:{onReady:onPlayerReady,onStateChange:onPlayerStateChange}
   });
 }
-function onPlayerReady(evt){
-  skeleton.style.display='none';
-  try{ evt.target.playVideo(); }catch(e){}
-  try{ player.unMute(); player.setVolume(currentVolume); isMuted=false; updateUI(); }catch(e){}
-  populateSpeedOptions();
-  setAspect(currentAspect);
-  showControlsTemporarily();
-  thumbImg.src = `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`;
-}
-function onPlayerStateChange(ev){
-  isPlaying=(ev.data===1);
-  if(ev.data===0){ endOverlay.style.display='flex'; } else { endOverlay.style.display='none'; }
-  updateUI();
-}
-function onPlayerError(ev){
-  console.warn('YT error',ev);
-  showMainHudText('Playback error');
-}
-/* ===== UI update ===== */
-function updateUI(){
-  btnPlay.textContent = isPlaying? '❚❚':'▶︎';
-  btnMute.textContent = isMuted? '🔇':'🔊';
-}
-/* ===== control wiring ===== */
-btnPlay.addEventListener('click', ()=> getPlayerStateThen(s => s===1? pauseVideo(): playVideo()));
-btnRewind.addEventListener('click', ()=> getCurrentTimeThen(t => seekTo(Math.max(0, t-SEEK_DOUBLE_TAP_SEC))));
-btnForward.addEventListener('click', ()=> getCurrentTimeThen(t => seekTo(t + SEEK_DOUBLE_TAP_SEC)));
-btnMute.addEventListener('click', ()=>{
-  if(isMuted){ unMute(); player.setVolume(currentVolume); isMuted=false; } else { mute(); isMuted=true; }
-  updateUI(); showVolumeHud(currentVolume); showControlsTemporarily();
-});
-btnSpeed.addEventListener('click', toggleSettingsPopup);
-btnSettings.addEventListener('click', toggleSettingsPopup);
-replayBtn.addEventListener('click', ()=> { if(player){ player.seekTo(0); player.playVideo(); endOverlay.style.display='none' } });
-btnCaptions.addEventListener('click', ()=>{
-  try{
-    const cur = player.getOption('captions','display');
-    player.setOption('captions','display',!cur);
-    showMainHudText(!cur? 'Captions On':'Captions Off',900);
-  }catch(e){
-    showMainHudText('Captions unavailable',900);
-  }
-  showControlsTemporarily();
-});
-// aspect buttons
-aspectBtns.forEach(btn => {
-  btn.addEventListener('click', (e) => {
-    aspectBtns.forEach(b => b.classList.remove('active'));
-    e.target.classList.add('active');
-    currentAspect = e.target.dataset.fit;
-    setAspect(currentAspect);
-  });
-});
-function setAspect(fit){
-  document.getElementById('yt-player').style.objectFit = fit;
-}
-/* exposed controls */
-function playVideo(){ if(player) player.playVideo(); }
-function pauseVideo(){ if(player) player.pauseVideo(); }
-function seekTo(sec){ if(player) player.seekTo(sec, true); }
-function getCurrentTime(){ try{return player?player.getCurrentTime():0;}catch(e){return 0;} }
-function getDuration(){ try{return player?player.getDuration():0;}catch(e){return 0;} }
-function setPlaybackRate(r){ try{ if(player) player.setPlaybackRate(r); btnSpeed.textContent = r + '×'; }catch(e){} }
-function mute(){ try{ if(player) player.mute(); isMuted=true; updateUI(); }catch(e){} }
-function unMute(){ try{ if(player) player.unMute(); isMuted=false; updateUI(); }catch(e){} }
-function setVolumePercent(p){ currentVolume = Math.max(0,Math.min(100,Math.round(p))); try{ if(player && player.setVolume) player.setVolume(currentVolume); }catch(e){} }
-/* ===== settings popup behavior ===== */
-function toggleSettingsPopup(e){
-  if(settingsPopup.style.display==='block') { settingsPopup.style.display='none'; }
-  else {
-    populateSpeedOptions();
-    settingsPopup.style.display='block';
-    setTimeout(()=> {
-      const off=(ev)=>{ if(!settingsPopup.contains(ev.target) && !btnSpeed.contains(ev.target) && !btnSettings.contains(ev.target)){ settingsPopup.style.display='none'; document.removeEventListener('click',off); } };
-      document.addEventListener('click', off);
-    }, 10);
-  }
-}
-/* populate speed */
-function populateSpeedOptions(){
-  speedOptions.innerHTML='';
-  const speeds=[0.5,0.75,1,1.25,1.5,2];
-  let cur=1; try{ cur = player.getPlaybackRate(); }catch(e){}
-  speeds.forEach(s=>{
-    const b=document.createElement('button'); b.textContent=s+'×'; b.classList.toggle('active',Math.abs(s-cur)<1e-6);
-    b.addEventListener('click', ()=>{ setPlaybackRate(s); populateSpeedOptions(); });
-    speedOptions.appendChild(b);
-  });
-}
-/* ===== scrubber behavior (pointer & touch) ===== */
-let scrubRect=null;
-progressBar.addEventListener('pointerdown', (e)=>{
-  isPointerDown=true; app.classList.add('dragging'); scrubRect=progressBar.getBoundingClientRect();
-  handleScrubPointer(e); document.documentElement.style.touchAction='none'; showControlsTemporarily();
-});
-window.addEventListener('pointermove', (e)=>{ if(isPointerDown) handleScrubPointer(e); });
-window.addEventListener('pointerup', (e)=>{
-  if(isPointerDown){ commitScrub(e); isPointerDown=false; scrubRect=null; app.classList.remove('dragging'); thumbPreview.style.display='none'; document.documentElement.style.touchAction=''; }
-});
-function handleScrubPointer(e){
-  if(!scrubRect) scrubRect=progressBar.getBoundingClientRect();
-  let x=Math.min(scrubRect.right, Math.max(scrubRect.left, e.clientX));
-  let pct=(x-scrubRect.left)/scrubRect.width; pct=Math.max(0,Math.min(1,pct));
-  const dur=getDuration()||0; const preview=Math.round(pct*dur);
-  const cur=getCurrentTime()||0; const delta=preview-cur;
-  positionThumb(x); showThumb(preview); showSeekHud(delta, preview, dur);
-  progressFill.style.width=(pct*100)+'%';
-  progressHandle.style.left=(pct*100)+'%';
-}
-function commitScrub(e){
-  if(!scrubRect) return;
-  let x=Math.min(scrubRect.right, Math.max(scrubRect.left, e.clientX));
-  let pct=(x-scrubRect.left)/scrubRect.width; pct=Math.max(0,Math.min(1,pct));
-  const dur=getDuration()||0; const t=Math.round(pct*dur);
-  seekTo(t); showThumbMessage(formatHHMMSS(t));
-}
-function positionThumb(screenX){
-  const wrap=progressBar.getBoundingClientRect(); const local=Math.min(Math.max(screenX-wrap.left,40),wrap.width-40);
-  const globalLeft=(wrap.left + local); const pct=(globalLeft/window.innerWidth)*100;
-  thumbPreview.style.left=pct+'vw'; thumbPreview.style.display='block';
-}
-function showThumb(sec){
-  const urls=[
-    `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`,
-    `https://i.ytimg.com/vi/${videoId}/sddefault.jpg`,
-    `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-    `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`,
-    `https://i.ytimg.com/vi/${videoId}/default.jpg`
-  ];
-  thumbImg.src=urls[0];
-  thumbImg.onerror=()=>{ for(let i=1;i<urls.length;i++){ const test=new Image(); test.src=urls[i]; test.onload=(u=urls[i])=>{ thumbImg.src=u; thumbImg.onerror=null; }; } };
-  thumbTime.textContent=formatHHMMSS(sec);
-}
-function showThumbMessage(txt){ thumbPreview.style.display='block'; thumbTime.textContent=txt; setTimeout(()=>{ thumbPreview.style.display='none'; },900); }
-/* ===== gestures (touch for seek/volume/brightness and double-tap/pinch) ===== */
-let lastTouch=0,lastTouchX=0,lastTouchY=0,touchActive=false,startX=0,startY=0,accDx=0,accDy=0,seekingGesture=false,adjustType=null;
-let pinchMode=false, pinchStartDist=0, pinchScale=1;
-function getDist(a,b){ const dx=a.clientX-b.clientX, dy=a.clientY-b.clientY; return Math.hypot(dx,dy); }
-function onTouchStart(e){
-  showControlsTemporarily();
-  if(e.touches.length===2){
-    pinchMode=true; pinchStartDist=getDist(e.touches[0], e.touches[1]); pinchScale=1; return;
-  }
-  if(e.touches.length!==1) return;
-  const t=e.touches[0]; startX=t.clientX; startY=t.clientY; accDx=0; accDy=0; touchActive=true;
-  const now=Date.now();
-  if(now-lastTouch<300 && Math.abs(lastTouchX-startX)<60 && Math.abs(lastTouchY-startY)<60){
-    const w=window.innerWidth;
-    if(startX < w*0.33){ getCurrentTimeThen(cur=>{ seekTo(Math.max(0,cur-SEEK_DOUBLE_TAP_SEC)); showSeekHud(-SEEK_DOUBLE_TAP_SEC, Math.max(0,cur-SEEK_DOUBLE_TAP_SEC), getDuration()); }); }
-    else if(startX > w*0.66){ getCurrentTimeThen(cur=>{ seekTo(cur+SEEK_DOUBLE_TAP_SEC); showSeekHud(SEEK_DOUBLE_TAP_SEC, cur+SEEK_DOUBLE_TAP_SEC, getDuration()); }); }
-    else { getPlayerStateThen(s=> s===1? pauseVideo(): playVideo()); }
-    lastTouch=0; e.preventDefault(); return;
-  }
-  lastTouch=now; lastTouchX=startX; lastTouchY=startY;
-  tryUnmuteOnGesture();
-}
-function onTouchMove(e){
-  if(pinchMode && e.touches.length===2){ const d=getDist(e.touches[0], e.touches[1]); pinchScale = d / pinchStartDist; applyPinchScale(pinchScale); e.preventDefault(); return; }
-  if(!touchActive) return;
-  const t=e.touches[0]; const dx=t.clientX-startX, dy=t.clientY-startY; accDx=dx; accDy=dy;
-  const adx=Math.abs(dx), ady=Math.abs(dy);
-  if(!seekingGesture && !adjustType){
-    if(adx>ady && adx>12) seekingGesture=true;
-    else if(ady>adx && ady>12) adjustType=(startX>window.innerWidth/2)?'volume':'brightness';
-  }
-  const dur=getDuration()||0; const cur=getCurrentTime()||0;
-  if(seekingGesture){
-    const pct=dx/window.innerWidth; const delta=Math.round(pct*DRAG_MAX_SEEK);
-    const preview = Math.max(0, Math.min(dur, Math.round(cur + delta)));
-    showSeekHud(delta, preview, dur);
-    showThumb(preview); positionThumb(startX + dx);
-    progressFill.style.width = ((preview/dur)*100)+'%'; progressHandle.style.left = ((preview/dur)*100)+'%';
-  } else if(adjustType){
-    const pct=-dy/window.innerHeight;
-    if(adjustType === 'volume'){
-      const change = pct*100; let v = currentVolume + change; v=Math.max(0,Math.min(100,v)); setVolumePercent(v);
-      showVolumeHud(v);
-    } else {
-      let pw=document.getElementById('playerWrap'); let curB = parseFloat(pw.getAttribute('data-bright')||'1');
-      let brightness = curB + pct*0.18; brightness = Math.max(0.5, Math.min(1.6, brightness));
-      pw.style.filter = `brightness(${brightness})`;
-      pw.setAttribute('data-bright', brightness.toString());
-      const percent = Math.round((brightness-0.5)/1.1*100);
-      showBrightnessHud(percent, brightness);
-    }
-  }
-  e.preventDefault();
-}
-function onTouchEnd(e){
-  if(pinchMode){ commitPinch(); pinchMode=false; pinchStartDist=0; pinchScale=1; return; }
-  if(seekingGesture){
-    const dx=accDx; const pct=dx/window.innerWidth; const delta=Math.round(pct*DRAG_MAX_SEEK);
-    getCurrentTimeThen(cur=>{ const dest=Math.max(0, Math.min(dur, Math.round(cur + delta))); seekTo(dest); showSeekHud(delta, dest, dur); showThumbMessage(formatHHMMSS(dest)); });
-  }
-  touchActive=false; seekingGesture=false; adjustType=null; accDx=0; accDy=0; lastTouch=0;
-}
-/* pinch handling */
-function applyPinchScale(scale){
-  const clamp = Math.max(0.8, Math.min(1.5, scale));
-  const ytPlayer = document.getElementById('yt-player');
-  ytPlayer.style.transform = `scale(${clamp})`;
-}
-function commitPinch(){
-  const ytPlayer = document.getElementById('yt-player');
-  ytPlayer.style.transform='';
-}
-/* attach listeners */
-app.addEventListener('touchstart', onTouchStart, {passive:false});
-app.addEventListener('touchmove', onTouchMove, {passive:false});
-app.addEventListener('touchend', onTouchEnd, {passive:false});
-app.addEventListener('touchcancel', onTouchEnd, {passive:false});
-app.addEventListener('pointerdown', showControlsTemporarily);
-app.addEventListener('click', showControlsTemporarily);
-/* try unmute on first real user gesture */
-function tryUnmuteOnGesture(){
-  try{ player.unMute(); player.setVolume(currentVolume); isMuted=false; updateUI(); }catch(e){}
-}
-/* ===== show controls and auto-hide ===== */
-function showControlsTemporarily(){
-  app.classList.add('controls-visible'); controlsCenter.classList.add('visible');
-  if(controlsTimer) clearTimeout(controlsTimer);
-  if(settingsPopup.style.display==='block') return;
-  controlsTimer = setTimeout(()=>{ app.classList.remove('controls-visible'); controlsCenter.classList.remove('visible'); }, CONTROLS_HIDE_MS);
-}
-document.addEventListener('mousemove', showControlsTemporarily);
-/* update loop for times/progress */
-function rafLoop(){
-  try{
-    if(player && player.getCurrentTime){
-      const cur=Math.floor(getCurrentTime()||0), dur=Math.floor(getDuration()||0);
-      timeLeft.textContent = formatHHMMSS(cur); timeRight.textContent = formatHHMMSS(dur);
-      mainHud.textContent = formatHHMMSS(cur) + ' / ' + formatHHMMSS(dur);
-      const pct = (dur>0) ? Math.max(0, Math.min(1, cur/dur)) : 0;
-      if(!dragging && !touchActive) { progressFill.style.width = (pct*100) + '%'; progressHandle.style.left = (pct*100) + '%'; }
-      progressBar.setAttribute('aria-valuenow', Math.round(pct*100));
-    }
-  }catch(e){}
-  requestAnimationFrame(rafLoop);
-}
-requestAnimationFrame(rafLoop);
-/* utility async helpers */
-function getPlayerStateThen(cb){ try{ cb(player?player.getPlayerState():-2); }catch(e){ cb(-2); } }
-function getCurrentTimeThen(cb){ try{ cb(player?player.getCurrentTime():0); }catch(e){ cb(0); } }
-/* ensure thumbnail present */
-thumbImg.src = `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`;
-/* hide skeleton fallback */
-setTimeout(()=>{ if(!player) skeleton.style.display='none'; }, 7000);
-/* final: initialize controls visible briefly */
-showControlsTemporarily();
+function onPlayerReady(e){ skeleton.style.display='none'; player.playVideo(); populateSpeedOptions(); populateQualityOptions(); showControlsTemporarily(); }
+function onPlayerStateChange(e){isPlaying=e.data===1;updateUI();if(e.data===0)endOverlay.style.display='flex';else endOverlay.style.display='none';}
+function updateUI(){btnPlay.textContent=isPlaying?'❚❚':'▶︎';btnMute.textContent=isMuted?'🔇':'🔊';}
+btnPlay.onclick=()=>isPlaying?player.pauseVideo():player.playVideo();
+btnRewind.onclick=()=>seek(-SEEK_DOUBLE_TAP_SEC);
+btnForward.onclick=()=>seek(SEEK_DOUBLE_TAP_SEC);
+btnMute.onclick=()=>{isMuted=!isMuted;isMuted?player.mute():player.unMute();updateUI();showVolumeHud(player.getVolume());}
+btnSpeed.onclick=toggleSettingsPopup;
+btnSettings.onclick=toggleSettingsPopup;
+replayBtn.onclick=()=>{player.seekTo(0);player.playVideo();endOverlay.style.display='none';}
+btnCaptions.onclick=()=>{try{const cur=player.getOption('captions','display');player.setOption('captions','display',!cur);}catch(e){alert('Captions unavailable');}};
+function seek(sec){player.seekTo(player.getCurrentTime()+sec,true);showSeekHud(sec);}
+function showSeekHud(delta){seekHudText.textContent=(delta>0?'+':'')+delta+'s';seekHudIcon.textContent=delta>0?'⟳':'⟲';seekHud.classList.add('visible');clearTimeout(seekHud._t);seekHud._t=setTimeout(()=>seekHud.classList.remove('visible'),800);}
+function showVolumeHud(p){vHudVal.textContent=Math.round(p)+'%';vBarFill.style.height=p+'%';vHud.classList.add('visible');clearTimeout(vHud._t);vHud._t=setTimeout(()=>vHud.classList.remove('visible'),800);}
+function showBrightnessHud(p){bHudVal.textContent=Math.round(p)+'%';bBarFill.style.height=p+'%';bHud.classList.add('visible');clearTimeout(bHud._t);bHud._t=setTimeout(()=>bHud.classList.remove('visible'),800);}
+function toggleSettingsPopup(){if(settingsPopup.style.display==='block')settingsPopup.style.display='none';else{populateSpeedOptions();populateQualityOptions();settingsPopup.style.display='block';setTimeout(()=>{document.addEventListener('click',offClick);},10);}function offClick(e){if(!settingsPopup.contains(e.target)&&e.target!==btnSettings){settingsPopup.style.display='none';document.removeEventListener('click',offClick);}}}
+function populateSpeedOptions(){speedOptions.innerHTML='';const speeds=[0.5,0.75,1,1.25,1.5,2];const cur=player.getPlaybackRate();speeds.forEach(s=>{const b=document.createElement('button');b.textContent=s+'×';b.classList.toggle('active',Math.abs(s-cur)<1e-6);b.onclick=()=>{player.setPlaybackRate(s);populateSpeedOptions();};speedOptions.appendChild(b);});}
+function populateQualityOptions(){qualityOptions.innerHTML='';let lv=[];try{lv=player.getAvailableQualityLevels();}catch(e){}if(!lv.length){qualityOptions.innerHTML='<div style="color:#888">Auto (managed by YouTube)</div>';return;}const cur=player.getPlaybackQuality();lv.forEach(q=>{const b=document.createElement('button');b.textContent=q;b.classList.toggle('active',q===cur);b.onclick=()=>{player.setPlaybackQuality(q);populateQualityOptions();};qualityOptions.appendChild(b);});}
+
+/* show controls globally */
+['pointerdown','touchstart','mousemove'].forEach(ev=>app.addEventListener(ev,showControlsTemporarily,{passive:true}));
+function showControlsTemporarily(){app.classList.add('controls-visible');controlsCenter.classList.add('visible');clearTimeout(controlsTimer);controlsTimer=setTimeout(()=>{app.classList.remove('controls-visible');controlsCenter.classList.remove('visible');},CONTROLS_HIDE_MS);}
+
+/* gestures */
+let startX=0,startY=0,adjustType=null;
+app.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;startX=e.touches[0].clientX;startY=e.touches[0].clientY;adjustType=null;});
+app.addEventListener('touchmove',e=>{
+ const t=e.touches[0];const dx=t.clientX-startX,dy=t.clientY-startY;
+ if(!adjustType){if(Math.abs(dx)>Math.abs(dy))adjustType='seek';else adjustType=(startX>window.innerWidth/2)?'volume':'brightness';}
+ if(adjustType==='seek'){const pct=dx/window.innerWidth;const delta=Math.round(pct*DRAG_MAX_SEEK);showSeekHud(delta);}
+ if(adjustType==='volume'){let v=player.getVolume()+(-dy/window.innerHeight*100);v=Math.max(0,Math.min(100,v));player.setVolume(v);showVolumeHud(v);}
+ if(adjustType==='brightness'){let p=-dy/window.innerHeight;let el=document.getElementById('playerWrap');let cur=parseFloat(el.dataset.b||1);cur=Math.max(0.5,Math.min(1.6,cur+p*0.3));el.style.filter=`brightness(${cur})`;el.dataset.b=cur;showBrightnessHud(((cur-0.5)/1.1)*100);}
+ e.preventDefault();
+},{passive:false});
+
+/* progress updater */
+function fmt(s){s=Math.floor(s);const m=Math.floor(s/60),sec=s%60;return m+':'+String(sec).padStart(2,'0');}
+function loop(){if(player&&player.getDuration){const d=player.getDuration()||0,c=player.getCurrentTime()||0;timeLeft.textContent=fmt(c);timeRight.textContent=fmt(d);const p=(d>0)?(c/d*100):0;progressFill.style.width=p+'%';progressHandle.style.left=p+'%';}requestAnimationFrame(loop);}loop();
 </script>
 </body>
 </html>
