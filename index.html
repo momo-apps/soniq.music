@@ -102,7 +102,6 @@
       <button class="btn" id="btnPlay">▶︎</button>
       <button class="btn small" id="btnForward">⟳</button>
       <button class="btn small" id="btnSpeed">1×</button>
-      <button class="btn small" id="btnAspect" title="Toggle Aspect">↔︎</button>
       <button class="btn small" id="btnMute">🔇</button>
     </div>
 
@@ -139,7 +138,6 @@ const timeLeft=document.getElementById('timeLeft'), timeRight=document.getElemen
 const progressBar=document.getElementById('progressBar'), progressFill=document.getElementById('progressFill'), progressHandle=document.getElementById('progressHandle');
 const thumbPreview=document.getElementById('thumbPreview'), thumbImg=document.getElementById('thumbImg'), thumbTime=document.getElementById('thumbTime');
 const btnPlay=document.getElementById('btnPlay'), btnRewind=document.getElementById('btnRewind'), btnForward=document.getElementById('btnForward');
-const btnMute=document.getElementById('btnMute'), btnSpeed=document.getElementById('btnSpeed'), btnAspect=document.getElementById('btnAspect');
 const btnSettings=document.getElementById('btnSettings'), settingsPopup=document.getElementById('settingsPopup');
 const speedOptions=document.getElementById('speedOptions'), qualityOptions=document.getElementById('qualityOptions');
 const controlsCenter=document.getElementById('controlsCenter'), endOverlay=document.getElementById('endOverlay'), replayBtn=document.getElementById('replayBtn');
@@ -159,7 +157,7 @@ function debugLog(){/* noop for now */}
 function onYouTubeIframeAPIReady(){
   player=new YT.Player('yt-player',{
     width:'100%', height:'100%', videoId:videoId,
-    playerVars:{autoplay:1,controls:1,rel:0,modestbranding:1,enablejsapi:1,fs:0,mute:INITIAL_MUTED?1:0,origin:window.location.origin,playsinline:1},
+    playerVars:{autoplay:1,controls:1,rel:0,modestbranding:1,enablejsapi:1,fs:0,mute:INITIAL_MUTED?1:0,origin:window.location.origin,playsinline:1, rel:0},
     events:{onReady:onPlayerReady,onStateChange:onPlayerStateChange,onError:onPlayerError}
   });
 }
@@ -199,7 +197,6 @@ btnMute.addEventListener('click', ()=>{
   showControlsTemporarily();
 });
 btnSpeed.addEventListener('click', ()=> openSettings('speed'));
-btnAspect.addEventListener('click', ()=> { toggleAspectMode(); showControlsTemporarily(); });
 btnSettings.addEventListener('click', toggleSettingsPopup);
 replayBtn.addEventListener('click', ()=> { if(player){ player.seekTo(0); player.playVideo(); endOverlay.style.display='none' } });
 
@@ -355,26 +352,6 @@ function onTouchEnd(e){
   touchActive=false; seekingGesture=false; adjustType=null; accDx=0; accDy=0; lastTouch=0;
 }
 
-/* pinch handling (simple): scale iframe visually, commit by calling setSize when gesture ends */
-function applyPinchScale(scale){
-  const clamp = Math.max(1, Math.min(1.9, scale));
-  const iframe = document.querySelector('#yt-player iframe');
-  if(iframe) iframe.style.transform = `scale(${clamp})`;
-}
-function commitPinch(){
-  const iframe = document.querySelector('#yt-player iframe');
-  if(!iframe) return;
-  const scale = parseFloat(iframe.style.transform.replace(/[^0-9.]/g,'')) || 1;
-  iframe.style.transform=''; // reset transform
-  if(scale > 1.12 && player && player.setSize){
-    const pw=document.getElementById('playerWrap'); const w=pw.clientWidth, h=pw.clientHeight;
-    player.setSize(Math.round(w*scale), Math.round(h*scale)); // apply scaled size
-  } else {
-    // else reset to contain/cover default
-    applyAspectMode(btnAspect.getAttribute('data-mode')||'cover');
-  }
-}
-
 /* attach touch listeners to app */
 app.addEventListener('touchstart', onTouchStart, {passive:false});
 app.addEventListener('touchmove', onTouchMove, {passive:false});
@@ -446,15 +423,6 @@ setTimeout(()=>{ if(!player) skeleton.style.display='none'; }, 7000);
 
 /* initial UI show */
 showControlsTemporarily();
-
-/* aspect helpers */
-function toggleAspectMode(){ const mode = (btnAspect.getAttribute('data-mode')||'cover') === 'cover' ? 'contain' : 'cover'; btnAspect.setAttribute('data-mode', mode); btnAspect.textContent = mode==='cover' ? '↔︎' : '⬚'; applyAspectMode(mode); }
-function applyAspectMode(mode){
-  const pw=document.getElementById('playerWrap'); const w=pw.clientWidth, h=pw.clientHeight;
-  try{
-    if(mode==='cover'){ player.setSize(w,h); } else { const target=16/9; let nw=w, nh=Math.round(nw/target); if(nh>h){ nh=h; nw=Math.round(nh*target); } player.setSize(nw,nh); }
-  }catch(e){}
-}
   
 </script>
 </body>
