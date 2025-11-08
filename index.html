@@ -6,18 +6,18 @@
 <title>Soniq — YouTube Player</title>
 <style>
   :root{
-    --accent:#e50914; /* Netflix red */
+    --accent:#e53935; /* Netflix / red accent for seek active */
     --bg:#000; --fg:#fff; --muted:rgba(255,255,255,0.06);
     --ui-h:56px;
   }
   html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,Arial,Helvetica}
   #app{position:relative;height:100vh;width:100vw;overflow:hidden;touch-action:none;background:#000}
 
-  /* player */
+  /* Player container */
   #playerWrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#000;z-index:10}
   #yt-player{width:100%;height:100%;display:block;object-fit:cover}
 
-  /* skeleton spinner */
+  /* skeleton / spinner while loading */
   #skeleton{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(90deg, rgba(255,255,255,0.01), rgba(255,255,255,0.02));z-index:40}
   #spinner{width:48px;height:48px;border-radius:50%;border:6px solid rgba(255,255,255,0.06);border-top-color:var(--accent);animation:spin .9s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
@@ -29,7 +29,7 @@
   #bHud{right:12%;top:40%;width:220px;transform:none;display:none}
   .hudVal{font-weight:700;margin-left:6px}
 
-  /* controls row */
+  /* bottom controls area (hidden unless controls visible) */
   #controlsRow{position:absolute;left:0;right:0;bottom:0;padding:10px 12px;z-index:60;pointer-events:none;display:flex;flex-direction:column;gap:8px}
   #scrubWrap{display:flex;align-items:center;gap:10px;pointer-events:auto}
   #timeLeft,#timeRight{color:#ddd;font-size:12px;min-width:70px;text-align:center}
@@ -38,32 +38,34 @@
   .progressFill{height:100%;width:0%;background:var(--accent);border-radius:6px;transition:width 120ms linear}
   .progressHandle{position:absolute;top:50%;transform:translate(-50%,-50%);width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,0.6);display:none}
 
-  /* thumbnail preview */
+  /* thumbnail preview above scrub */
   #thumbPreview{position:absolute;bottom:58px;left:0;transform:translateX(-50%);pointer-events:none;display:none;z-index:70;text-align:center}
   #thumbPreview .thumb{width:160px;height:90px;border-radius:6px;overflow:hidden;background:#111;display:block;box-shadow:0 6px 18px rgba(0,0,0,0.6)}
   #thumbPreview .time{margin-top:6px;color:#fff;font-size:12px}
 
-  /* center controls */
+  /* center controls row */
   #controlsCenter{position:absolute;left:50%;bottom:110px;transform:translateX(-50%);display:flex;gap:10px;align-items:center;z-index:60;pointer-events:auto;opacity:0;transition:opacity .18s}
   #controlsCenter.visible{opacity:1}
   .btn{height:var(--ui-h);min-width:var(--ui-h);border-radius:12px;background:var(--muted);border:0;color:var(--fg);display:flex;align-items:center;justify-content:center;font-size:18px}
   .btn.small{height:44px;min-width:44px;font-size:15px}
 
-  /* full-screen settings overlay */
+  /* full-screen settings overlay (Netflix style) */
   #settingsOverlay{position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:200;display:none;align-items:center;justify-content:center;padding:28px;box-sizing:border-box}
   #settingsContent{width:100%;max-width:900px;color:#fff;background:transparent}
   .settingsPanel{background:rgba(10,10,10,0.6);padding:18px;border-radius:12px;margin-bottom:16px}
-  .settingsRow{display:flex;flex-wrap:wrap;gap:8px}
+  .settingsRow{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .settingsRow button{background:transparent;border:1px solid rgba(255,255,255,0.06);color:#fff;padding:8px 12px;border-radius:8px}
 
-  /* end overlay */
+  /* end overlay (simple) */
   #endOverlay{position:absolute;inset:0;background:linear-gradient(to top, rgba(0,0,0,0.65), rgba(0,0,0,0.2));display:none;z-index:95;align-items:center;justify-content:center;flex-direction:column;gap:12px}
 
-  /* hide controls */
+  /* hide our scrub & center controls when controls not visible */
   #app.controls-visible #controlsCenter,
   #app.controls-visible #controlsRow { opacity:1; pointer-events:auto; transition:opacity .12s ease-in-out; display:block; }
   #app:not(.controls-visible) #controlsCenter,
   #app:not(.controls-visible) #controlsRow { opacity:0; pointer-events:none; transition:opacity .12s ease-in-out; display:none; }
 
+  /* show progress handle while dragging */
   .dragging .progressHandle{display:block}
 
   /* unmute CTA */
@@ -75,15 +77,24 @@
 <body>
   <div id="app" class="">
     <div id="playerWrap"><div id="yt-player"></div></div>
+
     <div id="skeleton"><div id="spinner"></div></div>
 
     <!-- HUDs -->
     <div id="mainHud" class="hudBox">00:00:00 / 00:00:00</div>
-    <div id="vHud" class="hudBox">Volume: <span id="vHudVal" class="hudVal">50%</span>
-      <div style="height:6px;background:#222;border-radius:6px;margin-top:6px"><div id="vBar" style="height:6px;width:50%;background:var(--accent);border-radius:6px"></div></div>
+
+    <div id="vHud" class="hudBox">
+      Volume: <span id="vHudVal" class="hudVal">50%</span>
+      <div style="height:6px;background:#222;border-radius:6px;margin-top:6px">
+        <div id="vBar" style="height:6px;width:50%;background:var(--accent);border-radius:6px"></div>
+      </div>
     </div>
-    <div id="bHud" class="hudBox">Brightness: <span id="bHudVal" class="hudVal">100%</span>
-      <div style="height:6px;background:#222;border-radius:6px;margin-top:6px"><div id="bBar" style="height:6px;width:0%;background:var(--accent);border-radius:6px"></div></div>
+
+    <div id="bHud" class="hudBox">
+      Brightness: <span id="bHudVal" class="hudVal">100%</span>
+      <div style="height:6px;background:#222;border-radius:6px;margin-top:6px">
+        <div id="bBar" style="height:6px;width:0%;background:var(--accent);border-radius:6px"></div>
+      </div>
     </div>
 
     <!-- bottom controls -->
@@ -95,13 +106,16 @@
             <div class="progressFill" id="progressFill"></div>
             <div class="progressHandle" id="progressHandle"></div>
           </div>
-          <div id="thumbPreview"><div class="thumb"><img id="thumbImg" src="" style="width:100%;height:100%;object-fit:cover" /></div><div class="time" id="thumbTime">00:00:00</div></div>
+          <div id="thumbPreview">
+            <div class="thumb"><img id="thumbImg" src="" style="width:100%;height:100%;object-fit:cover" /></div>
+            <div class="time" id="thumbTime">00:00:00</div>
+          </div>
         </div>
         <div id="timeRight">00:00:00</div>
       </div>
     </div>
 
-    <!-- center controls -->
+    <!-- center controls row -->
     <div id="controlsCenter">
       <button class="btn small" id="btnRewind" title="Rewind 10s">⟲</button>
       <button class="btn" id="btnPlay" title="Play/Pause">▶︎</button>
@@ -112,7 +126,7 @@
       <button class="btn small" id="btnSettings" title="Settings">⚙︎</button>
     </div>
 
-    <!-- full-screen settings overlay -->
+    <!-- full screen settings overlay -->
     <div id="settingsOverlay" role="dialog" aria-modal="true">
       <div id="settingsContent">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
@@ -134,6 +148,7 @@
 
     <div id="unmuteCTA"><button id="tapToUnmute" style="padding:10px 16px;border-radius:8px;background:var(--accent);color:#fff;border:0">Tap to unmute</button></div>
 
+    <!-- small end-screen overlay to block YT suggestions -->
     <div id="endOverlay" style="display:flex;">
       <div style="color:#fff;font-size:18px">Playback ended</div>
       <div><button id="replayBtn" class="btn">Replay</button></div>
@@ -141,15 +156,10 @@
   </div>
 
 <script>
-/* ---------- config ---------- */
-const DEFAULT_ID='dQw4w9WgXcQ';
-const SEEK_DOUBLE_TAP_SEC=10;
-const DRAG_MAX_SEEK=120;
-const INITIAL_MUTED=true;
-const CONTROLS_HIDE_MS=3000;
-const MIN_PLAYED_SECONDS_BEFORE_END = 1.0; // avoid false ended
+/* ===== config ===== */
+const DEFAULT_ID='dQw4w9WgXcQ', SEEK_DOUBLE_TAP_SEC=10, DRAG_MAX_SEEK=120, INITIAL_MUTED=true, CONTROLS_HIDE_MS=3000;
 
-/* ---------- refs ---------- */
+/* ===== refs ===== */
 const app=document.getElementById('app');
 const skeleton=document.getElementById('skeleton');
 const mainHud=document.getElementById('mainHud');
@@ -169,24 +179,23 @@ const unmuteCTA=document.getElementById('unmuteCTA'), tapToUnmute=document.getEl
 let player=null, videoId=(new URLSearchParams(location.search)).get('videoId')||DEFAULT_ID;
 let isPlaying=false, isMuted=INITIAL_MUTED, durationSec=0;
 let controlsTimer=null, isPointerDown=false, currentVolume=50;
-let playbackStartedAt=null;
 
-/* ---------- load YouTube IFrame API ---------- */
+/* ===== load YT API ===== */
 (function(){const t=document.createElement('script'); t.src="https://www.youtube.com/iframe_api"; t.async=true; document.head.appendChild(t);})();
 
-/* ---------- helpers ---------- */
+/* ===== helpers ===== */
 function pad2(n){return String(n).padStart(2,'0');}
 function formatHHMMSS(sec){
   sec=Math.max(0,Math.floor(sec||0));
   const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60;
-  return (h>0?pad2(h)+':':'') + pad2(m) + ':' + pad2(s);
+  return pad2(h) + ':' + pad2(m) + ':' + pad2(s);
 }
-function debug(){/* noop - removed debug text */}
 
-/* ---------- IFrame callbacks ---------- */
+/* ===== IFrame API callbacks ===== */
 function onYouTubeIframeAPIReady(){
   player=new YT.Player('yt-player',{
     width:'100%', height:'100%', videoId:videoId,
+    // hide native YT controls — we provide our own UI
     playerVars:{autoplay:1,controls:0,rel:0,modestbranding:1,enablejsapi:1,fs:0,mute:INITIAL_MUTED?1:0,origin:window.location.origin,playsinline:1},
     events:{onReady:onPlayerReady,onStateChange:onPlayerStateChange,onError:onPlayerError}
   });
@@ -194,53 +203,36 @@ function onYouTubeIframeAPIReady(){
 
 function onPlayerReady(evt){
   skeleton.style.display='none';
-  // play muted first (improves autoplay reliability)
+  // try play (muted) and then try to unmute — browsers may block unmute; CTA appears if needed
   try{ evt.target.playVideo(); }catch(e){}
-  // attempt to unmute shortly after — if blocked, show CTA
+  // attempt quick unmute — if blocked, show CTA
   setTimeout(()=>{
     try {
       evt.target.unMute();
       evt.target.setVolume(60);
-      isMuted=false; updateUI();
+      isMuted=false;
+      updateUI();
     } catch(e) {
+      // blocked — show CTA to let user unmute
       showUnmuteCTA();
     }
   }, 200);
-  populateSpeedOptions();
-  // don't populate quality until user opens settings (can be empty before metadata ready)
+  populateSpeedOptions(); populateQualityOptions();
   showControlsTemporarily();
 }
 
 function onPlayerStateChange(ev){
-  const s = ev.data;
-  if(s === YT.PlayerState.PLAYING){
-    // mark playback started time (used to avoid false ENDED)
-    if(!playbackStartedAt) playbackStartedAt = performance.now();
-    endOverlay.style.display='none';
-  }
-  if(s === YT.PlayerState.ENDED){
-    // only show ended if playback actually ran for some seconds
-    const playedSec = playbackStartedAt ? (performance.now() - playbackStartedAt)/1000 : 0;
-    if(playedSec < MIN_PLAYED_SECONDS_BEFORE_END){
-      // likely a false end — retry once
-      try{ player.seekTo(0); player.playVideo(); }catch(e){}
-    } else {
-      endOverlay.style.display='flex';
-    }
-  } else {
-    if(s !== YT.PlayerState.ENDED) endOverlay.style.display='none';
-  }
-  isPlaying = (s === YT.PlayerState.PLAYING);
+  const s=ev.data;
+  isPlaying = (s===1);
+  if(s===0){ endOverlay.style.display='flex'; } else { endOverlay.style.display='none'; }
   updateUI();
 }
 
-/* more robust error message */
 function onPlayerError(ev){
-  const code = ev && ev.data ? ev.data : 'unknown';
-  alert('Playback error: ' + code + '. The video may be blocked for embedding or restricted.');
+  alert('Playback error: '+ev.data + '. Video may be restricted for embedding.');
 }
 
-/* ---------- UI updates & wiring ---------- */
+/* ===== UI updates & control wiring ===== */
 function updateUI(){
   btnPlay.textContent = isPlaying ? '❚❚' : '▶︎';
   btnMute.textContent = isMuted ? '🔇' : '🔊';
@@ -259,9 +251,9 @@ btnAspect.addEventListener('click', ()=> { toggleAspectMode(); showControlsTempo
 btnSettings.addEventListener('click', ()=> openSettings('all'));
 replayBtn.addEventListener('click', ()=> { if(player){ player.seekTo(0); player.playVideo(); endOverlay.style.display='none' } });
 
-/* exposed player wrappers */
-function playVideo(){ if(player) { player.playVideo(); showControlsTemporarily(); } }
-function pauseVideo(){ if(player) { player.pauseVideo(); showControlsTemporarily(); } }
+/* exposed controls */
+function playVideo(){ if(player) {player.playVideo(); showControlsTemporarily();} }
+function pauseVideo(){ if(player) {player.pauseVideo(); showControlsTemporarily();} }
 function seekTo(sec){ if(player) { player.seekTo(sec, true); } }
 function getCurrentTime(){ try{return player?player.getCurrentTime():0;}catch(e){return 0;} }
 function getDuration(){ try{return player?player.getDuration():0;}catch(e){return 0;} }
@@ -270,17 +262,21 @@ function mute(){ try{ if(player) player.mute(); isMuted=true; updateUI(); }catch
 function unMute(){ try{ if(player) player.unMute(); isMuted=false; updateUI(); }catch(e){} }
 function setVolumePercent(p){ try{ if(player && player.setVolume) player.setVolume(Math.max(0,Math.min(100,Math.round(p)))); }catch(e){} }
 
-/* ---------- settings overlay (Netflix-like) ---------- */
+/* ===== settings overlay (full screen) ===== */
 function openSettings(kind){
   settingsOverlay.style.display='flex';
-  populateSpeedOptions();
-  // populate quality on demand (player.availableQualityLevels may be ready now)
-  populateQualityOptions();
+  populateSpeedOptions(); populateQualityOptions();
 }
-function closeSettingsOverlay(){ settingsOverlay.style.display='none'; }
+function closeSettingsOverlay(){
+  settingsOverlay.style.display='none';
+}
 closeSettings.addEventListener('click', closeSettingsOverlay);
-settingsOverlay.addEventListener('pointerdown', (ev)=>{ if(ev.target === settingsOverlay) closeSettingsOverlay(); });
+// close on outside click
+settingsOverlay.addEventListener('pointerdown', (ev)=>{
+  if(ev.target === settingsOverlay) closeSettingsOverlay();
+});
 
+/* populate lists */
 function populateSpeedOptions(){
   speedOptionsPanel.innerHTML='';
   const speeds=[0.5,0.75,1,1.25,1.5,2];
@@ -294,24 +290,22 @@ function populateSpeedOptions(){
 }
 function populateQualityOptions(){
   qualityOptionsPanel.innerHTML='';
-  let levels=[];
-  try{ levels = player.getAvailableQualityLevels ? player.getAvailableQualityLevels() : []; }catch(e){ levels=[]; }
+  let levels=[]; try{ levels = player.getAvailableQualityLevels ? player.getAvailableQualityLevels() : []; }catch(e){ levels=[]; }
   if(!levels || levels.length===0) levels=['hd1080','hd720','large','medium','small'];
-  let cur='';
-  try{ cur = player.getPlaybackQuality ? player.getPlaybackQuality() : ''; }catch(e){ cur=''; }
+  let cur=''; try{ cur = player.getPlaybackQuality ? player.getPlaybackQuality() : ''; }catch(e){ cur=''; }
   levels.forEach(q=>{
     const btn=document.createElement('button'); btn.textContent=q;
-    btn.style.fontWeight = (q===cur)?'700':'400';
+    btn.style.fontWeight = (q===cur) ? '700' : '400';
     btn.addEventListener('click', ()=>{ try{ if(player.setPlaybackQuality) player.setPlaybackQuality(q); }catch(e){} populateQualityOptions(); });
     qualityOptionsPanel.appendChild(btn);
   });
 }
 
-/* ---------- scrubber + thumbnail ---------- */
-let scrubRect=null, pointerDown=false;
-progressBar.addEventListener('pointerdown', (e)=>{ pointerDown=true; isPointerDown=true; scrubRect=progressBar.getBoundingClientRect(); app.classList.add('dragging'); handleScrubPointer(e); document.documentElement.style.touchAction='none'; showControlsTemporarily(); });
-window.addEventListener('pointermove', (e)=>{ if(pointerDown) handleScrubPointer(e); });
-window.addEventListener('pointerup', (e)=>{ if(pointerDown){ commitScrub(e); pointerDown=false; isPointerDown=false; app.classList.remove('dragging'); thumbPreview.style.display='none'; document.documentElement.style.touchAction=''; } });
+/* ===== scrubber behavior with thumbnail preview ===== */
+let scrubRect=null;
+progressBar.addEventListener('pointerdown', (e)=>{ isPointerDown=true; app.classList.add('dragging'); scrubRect=progressBar.getBoundingClientRect(); handleScrubPointer(e); document.documentElement.style.touchAction='none'; showControlsTemporarily(); });
+window.addEventListener('pointermove', (e)=>{ if(isPointerDown) handleScrubPointer(e); });
+window.addEventListener('pointerup', (e)=>{ if(isPointerDown){ commitScrub(e); isPointerDown=false; scrubRect=null; app.classList.remove('dragging'); thumbPreview.style.display='none'; document.documentElement.style.touchAction=''; } });
 
 function handleScrubPointer(e){
   if(!scrubRect) scrubRect=progressBar.getBoundingClientRect();
@@ -335,21 +329,30 @@ function positionThumb(screenX){
   thumbPreview.style.left=pct+'vw'; thumbPreview.style.display='block';
 }
 function showThumb(sec){
-  const urls=[`https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`,`https://i.ytimg.com/vi/${videoId}/sddefault.jpg`,`https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,`https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`,`https://i.ytimg.com/vi/${videoId}/default.jpg`];
+  // simple fallback: YouTube thumbnails (not frame-accurate)
+  const urls=[
+    `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`,
+    `https://i.ytimg.com/vi/${videoId}/sddefault.jpg`,
+    `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+    `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`,
+    `https://i.ytimg.com/vi/${videoId}/default.jpg`
+  ];
   thumbImg.src=urls[0];
   thumbImg.onerror=function(){ for(let i=1;i<urls.length;i++){ const test=new Image(); test.src=urls[i]; test.onload=(function(u){return function(){ thumbImg.src=u; thumbImg.onerror=null; };})(urls[i]); } };
   thumbTime.textContent=formatHHMMSS(sec);
 }
 function showThumbMessage(txt){ thumbPreview.style.display='block'; thumbTime.textContent=txt; setTimeout(()=>{ thumbPreview.style.display='none'; },900); }
 
-/* ---------- gestures: tap/double-tap, drag (seek), vertical adjust, pinch ---------- */
+/* ===== gestures (single touch double-tap, horizontal seek, vertical vol/bright, pinch) ===== */
 let lastTouch=0,lastTouchX=0,lastTouchY=0,touchActive=false,startX=0,startY=0,accDx=0,accDy=0,seekingGesture=false,adjustType=null;
 let pinchMode=false, pinchStartDist=0, pinchScale=1;
 
 function getDist(a,b){ const dx=a.clientX-b.clientX, dy=a.clientY-b.clientY; return Math.hypot(dx,dy); }
 
 function onTouchStart(e){
-  if(e.touches.length===2){ pinchMode=true; pinchStartDist=getDist(e.touches[0], e.touches[1]); pinchScale=1; return; }
+  if(e.touches.length===2){
+    pinchMode=true; pinchStartDist=getDist(e.touches[0], e.touches[1]); pinchScale=1; return;
+  }
   if(e.touches.length!==1) return;
   const t=e.touches[0]; startX=t.clientX; startY=t.clientY; accDx=0; accDy=0; touchActive=true;
   const now=Date.now();
@@ -375,6 +378,7 @@ function onTouchMove(e){
   if(seekingGesture){
     const pct=dx/window.innerWidth; const delta=Math.round(pct*DRAG_MAX_SEEK);
     showThumbMessage((delta>0?'+':'')+delta+'s');
+    // show preview fill relative (not commit)
     const cur=getCurrentTime()||0, dur=getDuration()||1;
     const fill = Math.max(0, Math.min(1, (cur + pct*DRAG_MAX_SEEK)/dur));
     progressFill.style.width = (fill*100)+'%';
@@ -384,9 +388,10 @@ function onTouchMove(e){
       const change = pct*100; let v = currentVolume + change; v=Math.max(0,Math.min(100,v)); setVolumePercent(v); currentVolume=v;
       showVolumeHud(currentVolume);
     } else {
+      // simulate brightness via CSS filter on playerWrap
       const pw=document.getElementById('playerWrap');
       let curFilter = 1;
-      try { const m = (pw.style.filter||'').match(/brightness\(([^)]+)\)/); if(m) curFilter = parseFloat(m[1]); } catch(e){}
+      try { const m = pw.style.filter.match(/brightness\(([^)]+)\)/); if(m) curFilter = parseFloat(m[1]); } catch(e){}
       let brightness = curFilter + pct*0.18; brightness = Math.max(0.4, Math.min(1.6, brightness));
       pw.style.filter = `brightness(${brightness})`;
       const percent = Math.round(((brightness-0.4)/(1.2))*100);
@@ -396,7 +401,9 @@ function onTouchMove(e){
   e.preventDefault();
 }
 function onTouchEnd(e){
-  if(pinchMode){ commitPinch(); pinchMode=false; pinchStartDist=0; pinchScale=1; return; }
+  if(pinchMode){
+    commitPinch(); pinchMode=false; pinchStartDist=0; pinchScale=1; return;
+  }
   if(seekingGesture){
     const dx=accDx; const pct=dx/window.innerWidth; const delta=Math.round(pct*DRAG_MAX_SEEK);
     getCurrentTimeThen(cur=>{ const dest=Math.max(0, Math.min((getDuration()||99999), Math.round(cur + delta))); seekTo(dest); showThumbMessage((delta>0?'+':'')+delta+'s'); });
@@ -404,7 +411,7 @@ function onTouchEnd(e){
   touchActive=false; seekingGesture=false; adjustType=null; accDx=0; accDy=0; lastTouch=0;
 }
 
-/* pinch */
+/* pinch handling */
 function applyPinchScale(scale){
   const clamp = Math.max(1, Math.min(1.9, scale));
   const iframe = document.querySelector('#yt-player iframe');
@@ -423,19 +430,20 @@ function commitPinch(){
   }
 }
 
-/* attach touch listeners */
+/* attach touch listeners to app */
 app.addEventListener('touchstart', onTouchStart, {passive:false});
 app.addEventListener('touchmove', onTouchMove, {passive:false});
 app.addEventListener('touchend', onTouchEnd, {passive:false});
 app.addEventListener('touchcancel', onTouchEnd, {passive:false});
+document.addEventListener('mousemove', showControlsTemporarily);
 
-/* ---------- unmute CTA ---------- */
+/* unmute CTA */
 function showUnmuteCTA(){ unmuteCTA.style.display='block'; }
 tapToUnmute.addEventListener('click', ()=>{
   try { player.unMute(); player.setVolume(60); isMuted=false; updateUI(); unmuteCTA.style.display='none'; } catch(e){ alert('Tap to unmute failed'); }
 });
 
-/* ---------- HUD helpers ---------- */
+/* hud helpers */
 let hudTimer=null;
 function showVolumeHud(p){
   vHud.style.display='block'; vHudVal.textContent = Math.round(p) + '%'; vBar.style.width = Math.round(p) + '%';
@@ -449,23 +457,15 @@ function showMainHud(txt){
   mainHud.style.display='block'; mainHud.textContent = txt; clearTimeout(hudTimer); hudTimer=setTimeout(()=> mainHud.style.display='none',900);
 }
 
-/* ---------- controls visibility (tap toggles) ---------- */
+/* controls visibility */
 function showControlsTemporarily(){
   app.classList.add('controls-visible'); controlsCenter.classList.add('visible');
   if(controlsTimer) clearTimeout(controlsTimer);
   if(settingsOverlay.style.display==='flex') return;
   controlsTimer = setTimeout(()=>{ app.classList.remove('controls-visible'); controlsCenter.classList.remove('visible'); }, CONTROLS_HIDE_MS);
 }
-function toggleControls(){
-  if(app.classList.contains('controls-visible')) { app.classList.remove('controls-visible'); controlsCenter.classList.remove('visible'); }
-  else showControlsTemporarily();
-}
-document.addEventListener('mousemove', showControlsTemporarily);
-document.addEventListener('touchstart', showControlsTemporarily);
-/* click on the player toggles controls (ignore buttons) */
-app.addEventListener('click', (ev)=>{ if(ev.target.closest('.btn')) return; toggleControls(); });
 
-/* ---------- animation frame loop for UI ---------- */
+/* periodic UI update loop */
 function rafLoop(){
   try{
     if(player && player.getCurrentTime){
@@ -480,15 +480,26 @@ function rafLoop(){
 }
 requestAnimationFrame(rafLoop);
 
-/* ---------- helpers ---------- */
+/* async helpers */
 function getPlayerStateThen(cb){ try{ cb(player?player.getPlayerState():-2); }catch(e){ cb(-2); } }
 function getCurrentTimeThen(cb){ try{ cb(player?player.getCurrentTime():0); }catch(e){ cb(0); } }
 
-/* ---------- thumbnail init & skeleton fallback ---------- */
+/* scrub pointer state */
+let pointerDown=false, scrubRect=null;
+progressBar.addEventListener('pointerdown', (e)=>{ pointerDown=true; isPointerDown=true; scrubRect=progressBar.getBoundingClientRect(); app.classList.add('dragging'); handleScrubPointer(e); document.documentElement.style.touchAction='none'; showControlsTemporarily(); });
+window.addEventListener('pointermove', (e)=>{ if(pointerDown) handleScrubPointer(e); });
+window.addEventListener('pointerup', (e)=>{ if(pointerDown){ commitScrub(e); pointerDown=false; isPointerDown=false; app.classList.remove('dragging'); thumbPreview.style.display='none'; document.documentElement.style.touchAction=''; } });
+
+/* thumbnail attempt */
 thumbImg.src = `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`;
+
+/* safety hide skeleton if slow */
 setTimeout(()=>{ if(!player) skeleton.style.display='none'; }, 8000);
 
-/* ---------- aspect helpers ---------- */
+/* initial UI show */
+showControlsTemporarily();
+
+/* aspect ratio helpers */
 btnAspect.setAttribute('data-mode', 'cover');
 function toggleAspectMode(){ const mode = (btnAspect.getAttribute('data-mode')||'cover') === 'cover' ? 'contain' : 'cover'; btnAspect.setAttribute('data-mode', mode); btnAspect.textContent = mode==='cover' ? '↔︎' : '⬚'; applyAspectMode(mode); }
 function applyAspectMode(mode){
@@ -504,13 +515,10 @@ function applyAspectMode(mode){
   }catch(e){}
 }
 
-/* ---------- try unmute on user gesture ---------- */
+/* try to unmute on first real user gesture if blocked earlier */
 function tryUnmuteOnGesture(){
   try{ player.unMute(); player.setVolume(60); isMuted=false; updateUI(); unmuteCTA.style.display='none'; }catch(e){}
 }
-
-/* ---------- ready - remove debug output ---------- */
-/* All done */
 </script>
 </body>
 </html>
