@@ -455,6 +455,7 @@ function applyAspectMode(mode){
     if(mode==='cover'){ player.setSize(w,h); } else { const target=16/9; let nw=w, nh=Math.round(nw/target); if(nh>h){ nh=h; nw=Math.round(nh*target); } player.setSize(nw,nh); }
   }catch(e){}
 }
+  
 </script>
 </body>
 </html>
