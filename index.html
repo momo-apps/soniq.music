@@ -3,297 +3,176 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-<title>Soniq — Android Player (updated)</title>
+<title>Soniq — Android Player (Stable)</title>
 <style>
-  html,body{height:100%;margin:0;background:#000;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial;overflow:hidden}
-  #playerWrap{position:relative;width:100%;height:100%;background:#000}
-  #yt-player{width:100%;height:100%;background:#000;position:relative;z-index:1}
-  /* overlay that will be enabled only for gestures; initially passive */
-  #gestureLayer{position:absolute;inset:0;z-index:5;pointer-events:none;touch-action:none}
-
-  /* seek HUD centered */
-  #seekHud{
-    position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(1);
-    background:rgba(0,0,0,0.78);padding:12px 16px;border-radius:10px;
-    font-weight:700;font-size:15px;text-align:center;color:#fff;display:none;opacity:0;
-    transition:opacity .18s,transform .18s;z-index:20;
+  html,body{
+    margin:0;height:100%;overflow:hidden;background:#000;color:#fff;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial;
   }
-  #seekHud.visible{display:block;opacity:1;transform:translate(-50%,-50%) scale(1.03)}
-
-  /* HUD boxes for volume/brightness - appear on sides */
+  #playerWrap{position:relative;width:100%;height:100%;background:#000;}
+  #yt-player{width:100%;height:100%;background:#000;position:relative;z-index:1;}
+  /* gesture zone: middle strip (safe zone) */
+  #gestureZone{
+    position:absolute;left:0;right:0;
+    top:15%;bottom:15%;   /* <-- adjustable boundaries */
+    z-index:5;touch-action:none;
+  }
+  /* center HUD */
+  #seekHud{
+    position:absolute;left:50%;top:50%;
+    transform:translate(-50%,-50%) scale(1);
+    background:rgba(0,0,0,0.75);padding:12px 18px;border-radius:12px;
+    font-weight:600;font-size:16px;text-align:center;display:none;opacity:0;
+    transition:opacity .2s,transform .2s;z-index:10;
+  }
+  #seekHud.visible{display:block;opacity:1;transform:translate(-50%,-50%) scale(1.05);}
+  /* Volume / Brightness HUDs */
   .hudBox{
     position:absolute;top:50%;transform:translateY(-50%);
-    background:rgba(0,0,0,0.78);padding:10px;border-radius:10px;
-    color:#fff;font-size:13px;display:flex;align-items:center;gap:8px;
-    opacity:0;transition:opacity .16s;z-index:20;
+    background:rgba(0,0,0,0.75);padding:10px 14px;border-radius:10px;
+    color:#fff;font-size:14px;display:none;align-items:center;gap:8px;
+    opacity:0;transition:opacity .2s;z-index:10;
   }
-  .hudBox.visible{opacity:1}
-  /* volume on left, brightness on right (swapped per your request) */
-  #vHud{left:16px}
-  #bHud{right:16px}
-  .hudBar{width:6px;height:120px;background:rgba(255,255,255,0.12);border-radius:4px;display:flex;align-items:flex-end;overflow:hidden}
-  .hudBarFill{width:100%;height:50%;background:#fff;border-radius:4px 4px 0 0;transition:height .06s linear}
-
-  /* small helper for showing native controls hint (not necessary but helpful) */
-  .sr-only{position:absolute;left:-9999px}
+  .hudBox.visible{display:flex;opacity:1;}
+  #vHud{left:20px;} #bHud{right:20px;}
+  .hudBar{width:4px;height:100px;background:rgba(255,255,255,0.2);border-radius:2px;overflow:hidden;display:flex;align-items:flex-end;}
+  .hudBarFill{width:100%;height:50%;background:#fff;border-radius:2px 2px 0 0;transition:height .1s;}
 </style>
 </head>
 <body>
   <div id="playerWrap">
     <div id="yt-player"></div>
-    <div id="gestureLayer" aria-hidden="false"></div>
 
-    <div id="seekHud" role="status" aria-live="polite">00:00:00 / 00:00:00<br>[ +0s ]</div>
+    <!-- Middle-only gesture zone -->
+    <div id="gestureZone"></div>
 
-    <div id="vHud" class="hudBox" aria-hidden="false"><span>🔊</span>
-      <div class="hudBar" aria-hidden="true"><div id="vFill" class="hudBarFill" style="height:60%"></div></div>
-    </div>
-
-    <div id="bHud" class="hudBox" aria-hidden="false"><span>🌞</span>
-      <div class="hudBar" aria-hidden="true"><div id="bFill" class="hudBarFill" style="height:45%"></div></div>
-    </div>
+    <!-- HUD overlays -->
+    <div id="seekHud">00:00:00 / 00:00:00<br>[ +0 s ]</div>
+    <div id="vHud" class="hudBox"><span>🔊</span><div class="hudBar"><div class="hudBarFill" id="vFill"></div></div></div>
+    <div id="bHud" class="hudBox"><span>🌞</span><div class="hudBar"><div class="hudBarFill" id="bFill"></div></div></div>
   </div>
 
 <script>
-/* -----------------------
-  Soniq Android player (updated)
-  - dynamic videoId via ?videoId=
-  - gestures: horizontal seek (with velocity), vertical volume (left) and brightness (right)
-  - taps pass-through to show native controls
-  - HUDs fixed and inverted direction corrected
-  - long press => 2x speed
-------------------------*/
+const params = new URLSearchParams(location.search);
+const videoId = params.get("videoId") || "dQw4w9WgXcQ";
 
-const query = new URLSearchParams(location.search);
-const videoId = query.get('videoId') || 'dQw4w9WgXcQ'; // fallback for dev
-let player = null;
-let isReady = false;
-let brightness = 1.0;
-let currentVol = 60;
+let player, ready=false, brightness=1, currentVol=60;
+let startX=0,startY=0,gesture=null,lastTap=0,longPressTimer=null;
 
-const gestureLayer = document.getElementById('gestureLayer');
-const seekHud = document.getElementById('seekHud');
-const vHud = document.getElementById('vHud'), bHud = document.getElementById('bHud');
-const vFill = document.getElementById('vFill'), bFill = document.getElementById('bFill');
+const seekHud=document.getElementById("seekHud");
+const vHud=document.getElementById("vHud"),bHud=document.getElementById("bHud");
+const vFill=document.getElementById("vFill"),bFill=document.getElementById("bFill");
+const gestureZone=document.getElementById("gestureZone");
 
-/* --- YouTube API load + init --- */
+/* --- YouTube API --- */
 (function(){
-  const s = document.createElement('script');
-  s.src = 'https://www.youtube.com/iframe_api';
-  s.async = true;
-  document.head.appendChild(s);
+  const tag=document.createElement("script");
+  tag.src="https://www.youtube.com/iframe_api";
+  document.head.appendChild(tag);
 })();
 function onYouTubeIframeAPIReady(){
-  player = new YT.Player('yt-player', {
-    videoId,
-    playerVars: {
-      controls: 1,
-      autoplay: 1,
-      rel: 0,
-      modestbranding: 1,
-      playsinline: 1,
-      enablejsapi: 1,
-      iv_load_policy: 3,
-      fs: 0,
-      disablekb: 1
+  player=new YT.Player("yt-player",{
+    videoId:videoId,
+    playerVars:{
+      autoplay:1,controls:1,rel:0,modestbranding:1,playsinline:1,
+      enablejsapi:1,iv_load_policy:3,fs:0,disablekb:1
     },
-    events: { onReady: onPlayerReady }
+    events:{onReady:onPlayerReady}
   });
 }
 function onPlayerReady(){
-  isReady = true;
-  try{ player.setVolume(currentVol); }catch(e){}
-  try{ player.playVideo(); }catch(e){}
+  ready=true;
+  player.setVolume(currentVol);
+  player.playVideo();
 }
 
-/* --- helpers --- */
-function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
-function fmtHMS(sec){
-  sec = Math.max(0, Math.floor(sec||0));
-  const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60), s = sec%60;
-  return (h>0 ? String(h).padStart(2,'0') + ':' : '') + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+/* --- Utilities --- */
+function fmt(sec){sec=Math.max(0,Math.floor(sec||0));
+  const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;
+  return (h>0?h.toString().padStart(2,"0")+":":"")+m.toString().padStart(2,"0")+":"+s.toString().padStart(2,"0");
 }
-function showSeekHUD(cur, dur, delta){
-  seekHud.innerHTML = `${fmtHMS(cur)} / ${fmtHMS(dur)}<br>[ ${delta>0?'+':''}${delta}s ]`;
-  seekHud.classList.add('visible');
-  clearTimeout(seekHud._t); seekHud._t = setTimeout(()=> seekHud.classList.remove('visible'), 900);
+function showSeekHud(cur,dur,delta){
+  seekHud.innerHTML=`${fmt(cur)} / ${fmt(dur)}<br>[ ${delta>0?"+":""}${fmt(Math.abs(delta))} ]`;
+  seekHud.classList.add("visible");
+  clearTimeout(seekHud._t);seekHud._t=setTimeout(()=>seekHud.classList.remove("visible"),900);
 }
-function showVolHUD(v){
-  vFill.style.height = `${v}%`;
-  vHud.classList.add('visible');
-  clearTimeout(vHud._t); vHud._t = setTimeout(()=> vHud.classList.remove('visible'), 900);
+function showVolHud(v){
+  vFill.style.height=v+"%";vHud.classList.add("visible");
+  clearTimeout(vHud._t);vHud._t=setTimeout(()=>vHud.classList.remove("visible"),900);
 }
-function showBrightHUD(pct){
-  bFill.style.height = `${pct}%`;
-  bHud.classList.add('visible');
-  clearTimeout(bHud._t); bHud._t = setTimeout(()=> bHud.classList.remove('visible'), 900);
+function showBrightHud(p){
+  bFill.style.height=p+"%";bHud.classList.add("visible");
+  clearTimeout(bHud._t);bHud._t=setTimeout(()=>bHud.classList.remove("visible"),900);
 }
 
-/* --- gesture logic: passive until movement threshold --- */
-let startX = 0, startY = 0;
-let gestureActive = false;
-let gestureType = null;       // 'seek' | 'volume' | 'brightness'
-let lastMoveTime = 0;
-let lastMoveX = 0;
-let longPressTimer = null;
-let lastTapTime = 0;
-const MOVE_THRESHOLD = 10; // px to start gesture
-const BASE_SEEK_SEC = 120; // base max seek for full-width drag
-const VELOCITY_SCALE = 0.012; // velocity factor to boost seek (tune)
-
-function enableOverlay() {
-  gestureLayer.style.pointerEvents = 'auto';
-}
-function disableOverlay() {
-  gestureLayer.style.pointerEvents = 'none';
-}
-
-/* start with overlay passive so taps reach iframe */
-disableOverlay();
-
-/* Listen on document so we can detect initial touch before overlay enabled */
-document.addEventListener('touchstart', function(e){
-  if(!isReady || e.touches.length !== 1) return;
-  startX = e.touches[0].clientX; startY = e.touches[0].clientY;
-  gestureActive = false; gestureType = null;
-  lastMoveTime = Date.now(); lastMoveX = startX;
-
-  // start long-press timer (2x speed)
+/* --- Gesture logic in safe zone --- */
+let velocity=0,lastMove=0,lastX=0;
+gestureZone.addEventListener("touchstart",e=>{
+  if(!ready||e.touches.length!==1)return;
+  startX=e.touches[0].clientX;startY=e.touches[0].clientY;gesture=null;
+  lastMove=Date.now();lastX=startX;
+  // long press for 2x
+  longPressTimer=setTimeout(()=>{
+    player.setPlaybackRate(2);
+    showSeekHud(player.getCurrentTime(),player.getDuration(),0);
+    seekHud.innerHTML="2× Speed";
+  },500);
+});
+gestureZone.addEventListener("touchmove",e=>{
+  const t=e.touches[0];const dx=t.clientX-startX,dy=t.clientY-startY;
   clearTimeout(longPressTimer);
-  longPressTimer = setTimeout(()=>{
-    if(isReady){
-      try{ player.setPlaybackRate(2); showSeekHUD(player.getCurrentTime(), player.getDuration(), 0); seekHud.firstChild && seekHud.firstChild.nodeValue;}
-      catch(e){}
-    }
-  }, 500);
-}, {passive:true});
-
-document.addEventListener('touchmove', function(e){
-  if(!isReady || e.touches.length !== 1) return;
-  const t = e.touches[0];
-  const dx = t.clientX - startX, dy = t.clientY - startY;
-  const dist = Math.hypot(dx, dy);
-
-  if(!gestureActive){
-    if(Math.abs(dx) > MOVE_THRESHOLD || Math.abs(dy) > MOVE_THRESHOLD){
-      // now activate overlay (capture subsequent events) and compute gesture type
-      gestureActive = true;
-      enableOverlay();
-      gestureType = Math.abs(dx) > Math.abs(dy) ? 'seek' : (startX > window.innerWidth/2 ? 'volume' : 'brightness');
-      // initialize lastMove
-      lastMoveTime = Date.now();
-      lastMoveX = t.clientX;
-    } else {
-      // not crossing threshold yet; let event pass as tap
-      return;
-    }
+  const adx=Math.abs(dx),ady=Math.abs(dy);
+  if(!gesture){if(adx>ady&&adx>10)gesture="seek";else if(ady>adx&&ady>10)gesture=(startX>window.innerWidth/2)?"brightness":"volume";}
+  if(gesture==="seek"){
+    const dur=player.getDuration()||0,cur=player.getCurrentTime()||0;
+    const now=Date.now();const dt=now-lastMove;
+    velocity=(dx-lastX)/dt;lastMove=now;lastX=dx;
+    const baseDelta=dx/window.innerWidth*120;
+    const delta=baseDelta*(1+Math.abs(velocity*25));
+    const preview=Math.max(0,Math.min(dur,cur+delta));
+    showSeekHud(preview,dur,delta);
+  }else if(gesture==="volume"){
+    let v=player.getVolume()+(-dy/window.innerHeight*100);
+    v=Math.max(0,Math.min(100,v));
+    player.setVolume(v);currentVol=v;showVolHud(v);
+  }else if(gesture==="brightness"){
+    brightness+=(-dy/window.innerHeight*0.5);
+    brightness=Math.max(0.5,Math.min(1.6,brightness));
+    document.getElementById("yt-player").style.filter=`brightness(${brightness})`;
+    const percent=Math.round((brightness-0.5)/1.1*100);
+    showBrightHud(percent);
   }
-
-  // we have active gesture: prevent default to stop page scrolling
   e.preventDefault();
+},{passive:false});
+gestureZone.addEventListener("touchend",e=>{
   clearTimeout(longPressTimer);
-
-  const now = Date.now();
-  const dt = Math.max(1, now - lastMoveTime);
-  const vx = (t.clientX - lastMoveX) / dt; // px per ms
-
-  if(gestureType === 'seek'){
-    // velocity-influenced delta:
-    // base delta proportional to dx; boost factor based on abs(velocity)
-    const dur = player.getDuration() || 0;
-    const cur = player.getCurrentTime() || 0;
-    const baseDelta = Math.round( (dx / window.innerWidth) * BASE_SEEK_SEC );
-    const velFactor = 1 + clamp(Math.abs(vx) / VELOCITY_SCALE, 0, 6); // clamp boost
-    const delta = Math.round(baseDelta * velFactor);
-    const preview = clamp(Math.round(cur + delta), 0, Math.round(dur||0));
-    showSeekHUD(preview, dur, delta);
-  } else if(gestureType === 'volume'){
-    // vertical: negative dy -> increase volume
-    const change = (-dy / window.innerHeight) * 100;
-    let v = clamp((player.getVolume ? player.getVolume() : currentVol) + change, 0, 100);
-    try{ player.setVolume(Math.round(v)); currentVol = Math.round(v); }catch(e){}
-    showVolHUD(currentVol);
-  } else if(gestureType === 'brightness'){
-    const change = (-dy / window.innerHeight) * 1.1; // mapped to brightness range
-    brightness = clamp(brightness + change, 0.5, 1.6);
-    document.getElementById('yt-player').style.filter = `brightness(${brightness})`;
-    // show percent mapped to 0..100 for bar
-    const pct = Math.round(((brightness - 0.5) / 1.1) * 100);
-    showBrightHUD(pct);
-  }
-
-  lastMoveTime = now;
-  lastMoveX = t.clientX;
-}, {passive:false});
-
-document.addEventListener('touchend', function(e){
-  clearTimeout(longPressTimer);
-
-  // if we never activated gestureActive, treat as tap -> pass through to iframe
-  if(!gestureActive){
-    const now = Date.now();
-    // detect double-tap for skip
-    if(now - lastTapTime < 300){
-      // double-tap: skip 10s left/right depending on x
-      const touch = e.changedTouches[0];
-      const half = window.innerWidth/2;
-      if(touch.clientX < half){
-        // left: back 10s
-        if(isReady) { try{ player.seekTo(Math.max(0, player.getCurrentTime()-10), true); showSeekHUD(Math.max(0, player.getCurrentTime()-10), player.getDuration(), -10); }catch(e){} }
-      } else {
-        if(isReady) { try{ player.seekTo(player.getCurrentTime()+10, true); showSeekHUD(player.getCurrentTime()+10, player.getDuration(), +10); }catch(e){} }
+  if(!ready)return;
+  const now=Date.now();
+  const dx=e.changedTouches[0].clientX-startX;
+  if(gesture==="seek"){
+    const dur=player.getDuration()||0,cur=player.getCurrentTime()||0;
+    const delta=dx/window.innerWidth*120*(1+Math.abs(velocity*25));
+    const dest=Math.max(0,Math.min(dur,cur+delta));
+    player.seekTo(dest,true);
+    showSeekHud(dest,dur,delta);
+  }else{
+    // double tap skip
+    if(now-lastTap<300){
+      const half=window.innerWidth/2;
+      if(startX<half){
+        player.seekTo(Math.max(0,player.getCurrentTime()-10),true);
+        showSeekHud(player.getCurrentTime()-10,player.getDuration(),-10);
+      }else{
+        player.seekTo(player.getCurrentTime()+10,true);
+        showSeekHud(player.getCurrentTime()+10,player.getDuration(),+10);
       }
-      lastTapTime = 0;
-      return;
-    } else {
-      // single tap: pass-through to iframe by temporarily disabling overlay and synthesizing click
-      lastTapTime = now;
-      // temporarily disable overlay pointer events so the real DOM (iframe) gets the native tap
-      disableOverlay();
-      // synthesize a small click on the underlying element (iframe)
-      const touch = e.changedTouches[0];
-      const el = document.elementFromPoint(touch.clientX, touch.clientY);
-      if(el){
-        const ev = new MouseEvent('click', {view:window,bubbles:true,cancelable:true,clientX:touch.clientX,clientY:touch.clientY});
-        el.dispatchEvent(ev);
-      }
-      // re-enable overlay after a short delay so future gestures still work
-      setTimeout(()=>{ enableOverlay(); disableOverlay(); /* ensure overlay returns to passive state */ }, 120);
-      return;
-    }
-  } else {
-    // gesture was active: finalize seek if needed and reset
-    if(gestureType === 'seek'){
-      const touch = e.changedTouches[0];
-      const dx = touch.clientX - startX;
-      const dur = player.getDuration() || 0;
-      const cur = player.getCurrentTime() || 0;
-      // recompute delta with small boost
-      const baseDelta = Math.round( (dx / window.innerWidth) * BASE_SEEK_SEC );
-      // no velocity here (we used it during move), keep simple final value
-      const dest = clamp(Math.round(cur + baseDelta), 0, Math.round(dur||0));
-      try{ player.seekTo(dest, true); showSeekHUD(dest, dur, baseDelta); }catch(e){}
-    }
-    // reset any long-press speed back to normal
-    try{ if(player && player.getPlaybackRate && player.getPlaybackRate() > 1) setTimeout(()=>player.setPlaybackRate(1), 500); }catch(e){}
+      lastTap=0;
+    }else{lastTap=now;}
   }
-
-  // cleanup
-  gestureActive = false;
-  gestureType = null;
-  // return overlay to passive state (so taps reach iframe)
-  disableOverlay();
-}, {passive:false});
-
-/* --- small defensive update loop for HUDs + initial states --- */
-(function initLoop(){
-  // ensure HUD bars reflect initial values
-  vFill.style.height = (currentVol) + '%';
-  bFill.style.height = Math.round(((brightness - 0.5)/1.1)*100) + '%';
-  // run once shortly after player ready if needed
-  setTimeout(()=>{ try{ if(player && player.getVolume) currentVol = player.getVolume(); vFill.style.height = currentVol + '%'; }catch(e){} }, 800);
-})();
-
+  // reset playback speed
+  if(player.getPlaybackRate()>1)setTimeout(()=>player.setPlaybackRate(1),500);
+  gesture=null;
+});
 </script>
 </body>
 </html>
