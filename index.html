@@ -3,124 +3,137 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover" />
-<title>YouTube Player — Soniq</title>
-
-<!-- preconnect to speed up youtube resources -->
-<link rel="preconnect" href="https://www.youtube.com">
-<link rel="preconnect" href="https://s.ytimg.com">
-<link rel="preconnect" href="https://www.google-analytics.com">
-
+<title>Soniq — YouTube Player</title>
 <style>
   :root{
-    --ui-size:56px; --accent:#1db954; --bg:#000; --fg:#fff; --muted:rgba(255,255,255,0.06);
-    --hud-bg: rgba(0,0,0,0.7);
+    --accent:#1db954; --bg:#000; --fg:#fff; --muted:rgba(255,255,255,0.06);
+    --ui-h:56px;
   }
-  html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);-webkit-font-smoothing:antialiased;font-family:system-ui, Arial;}
-  #app{position:relative;width:100%;height:100vh;overflow:hidden;touch-action:none;background:#000;}
-  #playerWrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#000;}
-  #yt-player{width:100%;height:100%;display:block;object-fit:cover;}
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,Arial,Helvetica}
+  #app{position:relative;height:100vh;width:100vw;overflow:hidden;touch-action:none;background:#000}
 
-  /* Skeleton & spinner (shows while player loads) */
-  #skeleton{position:absolute;inset:0;background:linear-gradient(90deg, rgba(255,255,255,0.02), rgba(255,255,255,0.04));display:flex;align-items:center;justify-content:center;z-index:50}
-  #spinner{width:64px;height:64px;border-radius:50%;border:6px solid rgba(255,255,255,0.06);border-top-color:var(--accent);animation:spin 900ms linear infinite}
+  /* player */
+  #playerWrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#000}
+  #yt-player{width:100%;height:100%;display:block;object-fit:cover}
+
+  /* skeleton */
+  #skeleton{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(90deg, rgba(255,255,255,0.01), rgba(255,255,255,0.02));z-index:40}
+  #spinner{width:48px;height:48px;border-radius:50%;border:6px solid rgba(255,255,255,0.06);border-top-color:var(--accent);animation:spin .9s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
 
-  /* HUD overlays */
-  .hud { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); pointer-events:none; background:var(--hud-bg); color:#fff; padding:8px 12px; border-radius:8px; font-size:16px; display:none; z-index:60}
-  #seekPreview { position:absolute; bottom:48%; left:50%; transform:translate(-50%,0); pointer-events:none; background:var(--hud-bg); padding:6px 10px; border-radius:8px; display:none; z-index:60}
+  /* center HUD */
+  #mainHud{position:absolute;left:50%;bottom:20%;transform:translateX(-50%);background:rgba(0,0,0,0.6);padding:6px 12px;border-radius:8px;z-index:60;display:none;font-size:14px}
 
-  /* Volume / brightness HUD */
-  .sideHUD { position:absolute; left:50%; top:20%; transform:translateX(-50%); pointer-events:none; display:none; z-index:65; }
-  .barWrap{ width:220px; background:rgba(255,255,255,0.06); border-radius:10px; padding:8px; display:flex; gap:8px; align-items:center; }
-  .bar { height:8px; width:100%; background:rgba(255,255,255,0.12); border-radius:6px; overflow:hidden; }
-  .barFill { height:100%; width:0%; background:var(--accent); border-radius:6px; transition:width 120ms linear; }
-  .hudLabel{min-width:60px; text-align:center; font-weight:600; color:#fff; font-size:13px;}
+  /* scrubber & bottom controls */
+  #controlsRow{position:absolute;left:0;right:0;bottom:0;padding:8px 12px;z-index:55;display:flex;align-items:flex-end;flex-direction:column;gap:6px;pointer-events:none}
+  #scrubWrap{width:100%;display:flex;align-items:center;gap:10px;pointer-events:auto}
+  #timeLeft,#timeRight{color:#ddd;font-size:12px;min-width:54px;text-align:center}
+  .scrubContainer{flex:1;position:relative;height:46px;display:flex;align-items:center}
+  .progressBar{height:6px;border-radius:6px;background:rgba(255,255,255,0.08);width:100%;position:relative}
+  .progressFill{height:100%;width:0%;background:var(--accent);border-radius:6px;transition:width 120ms linear}
+  .progressHandle{position:absolute;top:50%;transform:translate(-50%,-50%);width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,0.6);display:none}
 
-  /* Controls layout: bottom center */
-  #controlsCenter { position:absolute; left:50%; bottom:12px; transform:translateX(-50%); display:flex; gap:10px; pointer-events:auto; align-items:center; z-index:55; }
-  .btn { width:var(--ui-size); height:var(--ui-size); border-radius:12px; background:var(--muted); display:flex; align-items:center; justify-content:center; color:var(--fg); border:0; font-size:18px; }
-  .btn.small{ width:44px; height:44px; }
+  /* thumb preview */
+  #thumbPreview{position:absolute;bottom:52px;left:0;transform:translateX(-50%);pointer-events:none;display:none;z-index:70}
+  #thumbPreview .thumb{width:160px;height:90px;border-radius:6px;overflow:hidden;background:#111;display:block;box-shadow:0 6px 18px rgba(0,0,0,0.6)}
+  #thumbPreview .time{margin-top:6px;color:#fff;text-align:center;font-size:12px}
 
-  /* share left, settings right */
-  #btnShare{ position:absolute; left:12px; bottom:12px; z-index:55; pointer-events:auto; }
-  #btnSettings{ position:absolute; right:12px; bottom:12px; z-index:55; pointer-events:auto; }
+  /* center control buttons row (auto-hide) */
+  #controlsCenter{position:absolute;left:50%;bottom:90px;transform:translateX(-50%);display:flex;gap:10px;align-items:center;z-index:60;pointer-events:auto;opacity:0;transition:opacity .18s}
+  #controlsCenter.visible{opacity:1}
+  .btn{height:var(--ui-h);min-width:var(--ui-h);border-radius:12px;background:var(--muted);border:0;color:var(--fg);display:flex;align-items:center;justify-content:center;font-size:18px}
+  .btn.small{height:44px;min-width:44px;font-size:15px}
 
-  /* aspect top-right */
-  #btnAspect{ position:absolute; right:12px; top:12px; z-index:55; pointer-events:auto; }
+  /* top right settings popup (dropdown) */
+  #settingsBtnWrap{position:absolute;right:12px;top:12px;z-index:80;pointer-events:auto}
+  #settingsPopup{position:absolute;right:0;top:calc(100% + 8px);background:rgba(18,18,18,0.98);padding:10px;border-radius:10px;display:none;min-width:160px;box-shadow:0 8px 24px rgba(0,0,0,0.6)}
+  .settingsItem{color:#fff;padding:8px 6px;border-radius:6px;display:flex;justify-content:space-between;align-items:center;font-size:14px}
+  .settingsItem button{background:transparent;border:0;color:#fff;padding:6px 10px;border-radius:6px}
 
-  /* settings modal */
-  #settingsModal { position:absolute; right:12px; bottom:72px; background:var(--hud-bg); color:#fff; padding:8px; border-radius:10px; display:none; z-index:80; min-width:120px; }
-  #settingsModal button{display:block;width:100%;background:transparent;color:#fff;border:0;padding:6px 8px;text-align:left;border-radius:6px;}
-  #settingsModal button:hover{background:rgba(255,255,255,0.04);}
+  /* small end-screen overlay to block YT suggestions */
+  #endOverlay{position:absolute;inset:0;background:linear-gradient(to top, rgba(0,0,0,0.65), rgba(0,0,0,0.2));display:none;z-index:95;align-items:center;justify-content:center;flex-direction:column;gap:12px}
+  #endOverlay button{padding:10px 18px;border-radius:8px;background:var(--accent);border:0;color:#000;font-weight:700}
 
-  /* debug small text */
-  #debug{ position:absolute; left:8px; top:8px; font-size:12px; color:#ccc; z-index:60; pointer-events:none; }
+  /* debug (hidden) */
+  #debug{display:none}
 
-  /* responsive adjustments */
-  @media (min-width:900px){
-    .barWrap{ width:320px; }
-  }
+  /* responsive smaller thumbnail */
+  @media (max-width:480px){ #thumbPreview .thumb{width:120px;height:68px} }
 </style>
 </head>
 <body>
   <div id="app">
     <div id="playerWrap"><div id="yt-player"></div></div>
 
-    <!-- skeleton while loading -->
     <div id="skeleton"><div id="spinner"></div></div>
 
-    <!-- HUDs -->
-    <div class="hud" id="mainHud">0:00 / 0:00</div>
-    <div id="seekPreview">+0s</div>
+    <div id="mainHud">00:00:00 / 00:00:00</div>
 
-    <!-- Volume & Brightness HUDs (shared) -->
-    <div class="sideHUD" id="volumeHUD" style="left:auto; right:20px; top:40%;">
-      <div class="barWrap"><div class="hudLabel" id="volLabel">Vol</div><div class="bar"><div class="barFill" id="volFill"></div></div></div>
-    </div>
-    <div class="sideHUD" id="brightnessHUD" style="left:20px; right:auto; top:40%;">
-      <div class="barWrap"><div class="hudLabel" id="brightLabel">Bright</div><div class="bar"><div class="barFill" id="brightFill"></div></div></div>
+    <div id="controlsRow">
+      <div id="scrubWrap">
+        <div id="timeLeft">00:00:00</div>
+        <div class="scrubContainer">
+          <div class="progressBar" id="progressBar">
+            <div class="progressFill" id="progressFill"></div>
+            <div class="progressHandle" id="progressHandle"></div>
+          </div>
+          <div id="thumbPreview">
+            <div class="thumb"><img id="thumbImg" src="" style="width:100%;height:100%;object-fit:cover" /></div>
+            <div class="time" id="thumbTime">00:00:00</div>
+          </div>
+        </div>
+        <div id="timeRight">00:00:00</div>
+      </div>
     </div>
 
-    <!-- Controls -->
-    <div id="controlsCenter">
+    <div id="controlsCenter" class="">
       <button class="btn small" id="btnRewind">⟲</button>
       <button class="btn" id="btnPlay">▶︎</button>
       <button class="btn small" id="btnForward">⟳</button>
-      <button class="btn small" id="btnMute">🔇</button>
       <button class="btn small" id="btnSpeed">1×</button>
+      <button class="btn small" id="btnAspect" title="Toggle Aspect">↔︎</button>
+      <button class="btn small" id="btnMute">🔇</button>
     </div>
 
-    <button class="btn" id="btnShare" title="Share">⤴︎</button>
-    <div style="position:relative;">
-      <button class="btn" id="btnSettings" title="Settings">⚙︎</button>
-      <div id="settingsModal"></div>
+    <!-- settings dropdown (top-right) -->
+    <div id="settingsBtnWrap">
+      <button class="btn small" id="btnSettings" title="Settings">⚙︎</button>
+      <div id="settingsPopup" role="dialog" aria-modal="false">
+        <div style="font-weight:700;margin-bottom:6px">Playback Settings</div>
+        <div class="settingsItem" id="speedOptions"></div>
+        <div style="height:8px"></div>
+        <div class="settingsItem" id="qualityOptions"></div>
+      </div>
     </div>
 
-    <button class="btn" id="btnAspect" title="Toggle Aspect">↔︎</button>
+    <div id="endOverlay" style="display:flex;">
+      <div style="color:#fff;font-size:18px">Playback ended</div>
+      <div><button id="replayBtn">Replay</button></div>
+    </div>
 
-    <div id="debug"></div>
+    <div id="debug" aria-hidden="true"></div>
   </div>
 
 <script>
-/* ---------- config ---------- */
+/* ========== config ========== */
 const DEFAULT_ID = 'dQw4w9WgXcQ';
 const SEEK_DOUBLE_TAP_SEC = 10;
 const DRAG_MAX_SEEK = 120;
 const INITIAL_MUTED = true;
+const CONTROLS_HIDE_MS = 3000;
 
-/* ---------- refs ---------- */
-const debugEl = document.getElementById('debug');
+/* ========== refs ========== */
 const skeleton = document.getElementById('skeleton');
 const mainHud = document.getElementById('mainHud');
-const seekPreview = document.getElementById('seekPreview');
 
-const volumeHUD = document.getElementById('volumeHUD');
-const volFill = document.getElementById('volFill');
-const volLabel = document.getElementById('volLabel');
-
-const brightnessHUD = document.getElementById('brightnessHUD');
-const brightFill = document.getElementById('brightFill');
-const brightLabel = document.getElementById('brightLabel');
+const timeLeft = document.getElementById('timeLeft');
+const timeRight = document.getElementById('timeRight');
+const progressBar = document.getElementById('progressBar');
+const progressFill = document.getElementById('progressFill');
+const progressHandle = document.getElementById('progressHandle');
+const thumbPreview = document.getElementById('thumbPreview');
+const thumbImg = document.getElementById('thumbImg');
+const thumbTime = document.getElementById('thumbTime');
 
 const btnPlay = document.getElementById('btnPlay');
 const btnRewind = document.getElementById('btnRewind');
@@ -128,33 +141,38 @@ const btnForward = document.getElementById('btnForward');
 const btnMute = document.getElementById('btnMute');
 const btnSpeed = document.getElementById('btnSpeed');
 const btnAspect = document.getElementById('btnAspect');
-const btnShare = document.getElementById('btnShare');
 const btnSettings = document.getElementById('btnSettings');
-const settingsModal = document.getElementById('settingsModal');
+const settingsPopup = document.getElementById('settingsPopup');
+const speedOptions = document.getElementById('speedOptions');
+const qualityOptions = document.getElementById('qualityOptions');
+
+const controlsCenter = document.getElementById('controlsCenter');
+const endOverlay = document.getElementById('endOverlay');
+const replayBtn = document.getElementById('replayBtn');
 
 let player = null;
 let videoId = (new URLSearchParams(location.search)).get('videoId') || DEFAULT_ID;
-let isPlaying = false, isMuted = INITIAL_MUTED;
-let lastTap = 0, lastTapX = 0, lastTapY = 0;
+let isPlaying = false, isMuted = INITIAL_MUTED, durationSec = 0;
+let controlsTimer = null;
 
-/* ---------- load YouTube IFrame API (async) ---------- */
+/* ========== load YouTube IFrame API (async) ========== */
 (function loadYouTubeAPI(){
-  const tag = document.createElement('script');
-  tag.src = "https://www.youtube.com/iframe_api";
-  tag.async = true;
-  document.head.appendChild(tag);
+  const t = document.createElement('script');
+  t.src = "https://www.youtube.com/iframe_api";
+  t.async = true;
+  document.head.appendChild(t);
 })();
 
-/* ---------- API callbacks ---------- */
+/* ========== IFrame API callbacks ========== */
 function onYouTubeIframeAPIReady(){
   player = new YT.Player('yt-player', {
-    width: '100%', height: '100%',
+    width:'100%', height:'100%',
     videoId: videoId,
     playerVars: {
-      autoplay: 1, controls: 1, rel: 0, modestbranding: 1, fs: 1,
-      enablejsapi: 1, mute: INITIAL_MUTED ? 1 : 0, origin: window.location.origin
+      autoplay: 1, controls: 1, rel: 0, modestbranding:1, enablejsapi:1, fs:0, mute: INITIAL_MUTED ? 1 : 0,
+      origin: window.location.origin, playsinline:1
     },
-    events: {
+    events:{
       onReady: onPlayerReady,
       onStateChange: onPlayerStateChange,
       onError: onPlayerError
@@ -162,235 +180,315 @@ function onYouTubeIframeAPIReady(){
   });
 }
 
-function onPlayerReady(e){
-  debug('player ready');
+function onPlayerReady(evt){
   hideSkeleton();
-  try { e.target.playVideo(); } catch(e){}
-  trySyncVolume();
+  try { evt.target.playVideo(); } catch(e){}
+  trySync();
   updateUI();
+  populateSpeedOptions();
+  populateQualityOptions();
+  showControlsTemporarily();
 }
 
 function onPlayerStateChange(ev){
-  isPlaying = (ev.data === 1);
+  const state = ev.data;
+  isPlaying = (state === 1);
   updateUI();
-  debug('state:'+ev.data);
+  if(state === 0){
+    // ended -> show internal end overlay (blocks YouTube suggestions/links)
+    showEndOverlay();
+  } else {
+    hideEndOverlay();
+  }
+}
+
+/* block accidental navigation from YT end-screen by showing our overlay */
+function showEndOverlay(){
+  endOverlay.style.display = 'flex';
+}
+function hideEndOverlay(){
+  endOverlay.style.display = 'none';
 }
 
 function onPlayerError(ev){
-  debug('player error:' + ev.data);
-  alert('Player error: ' + ev.data + '\nIf it is an embedding restriction try a different video.');
+  console.warn('player error', ev.data);
+  // friendly UI message
+  alert('Playback error: ' + ev.data + '. Video may be restricted for embedding.');
 }
 
-/* ---------- UI helpers ---------- */
-function debug(msg){ debugEl.textContent = msg; }
+/* ========== helpers ========== */
 function hideSkeleton(){ skeleton.style.display = 'none'; }
-function showSkeleton(){ skeleton.style.display = 'flex'; }
-
-/* ---------- exposed functions for Android & console ---------- */
-function toggleAspect(mode){
-  // ensure global function exists so Android evaluateJavascript("toggleAspect('cover')") works
-  const iframe = (player && player.getIframe) ? player.getIframe() : document.querySelector('#yt-player iframe');
-  if(iframe){
-    iframe.style.objectFit = (mode === 'contain' ? 'contain' : 'cover');
-  }
+function updateUI(){
+  btnPlay.textContent = isPlaying ? '❚❚' : '▶︎';
+  btnMute.textContent = isMuted ? '🔇' : '🔊';
 }
-window.toggleAspect = toggleAspect; // explicit global
+function formatHHMMSS(sec){
+  sec = Math.max(0, Math.floor(sec||0));
+  const h = Math.floor(sec/3600);
+  const m = Math.floor((sec%3600)/60);
+  const s = sec%60;
+  return (h>0 ? String(h).padStart(2,'0')+':' : '00:') + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+}
 
+/* ========== global controls (exposed) ========== */
 function playVideo(){ if(player) player.playVideo(); }
 function pauseVideo(){ if(player) player.pauseVideo(); }
 function seekTo(sec){ if(player) player.seekTo(sec, true); }
 function getCurrentTime(){ try { return player ? player.getCurrentTime() : 0 } catch(e){ return 0 } }
 function getDuration(){ try { return player ? player.getDuration() : 0 } catch(e){ return 0 } }
-function setPlaybackRate(r){ if(player) player.setPlaybackRate(r); btnSpeed.textContent = r + '×'; }
-function mute(){ if(player){ player.mute(); isMuted=true; updateUI(); } }
-function unMute(){ if(player){ player.unMute(); isMuted=false; updateUI(); } }
-function setVolumePercent(p){ if(player && player.setVolume){ player.setVolume(Math.max(0,Math.min(100,Math.round(p)))); } }
+function setPlaybackRate(r){ if(player) { try { player.setPlaybackRate(r); btnSpeed.textContent = r + '×'; } catch(e){} } }
+function mute(){ if(player){ player.mute(); isMuted = true; updateUI(); } }
+function unMute(){ if(player){ player.unMute(); isMuted = false; updateUI(); } }
+function setVolumePercent(p){ if(player && player.setVolume) player.setVolume(Math.max(0,Math.min(100,Math.round(p)))); }
 
-/* ---------- button wiring ---------- */
-btnPlay.addEventListener('click', () => { getPlayerStateThen(s => s===1 ? pauseVideo() : playVideo()); });
-btnRewind.addEventListener('click', () => { getCurrentTimeThen(cur => seekTo(Math.max(0, cur - SEEK_DOUBLE_TAP_SEC))); showSeekPreview(`-${SEEK_DOUBLE_TAP_SEC}s`); });
-btnForward.addEventListener('click', () => { getCurrentTimeThen(cur => seekTo(cur + SEEK_DOUBLE_TAP_SEC)); showSeekPreview(`+${SEEK_DOUBLE_TAP_SEC}s`); });
-btnMute.addEventListener('click', () => {
-  if(isMuted){ unMute(); player.setVolume(50); } else { mute(); }
-  isMuted = !isMuted; updateUI();
-});
-btnSpeed.addEventListener('click', showSettingsMenu);
-btnAspect.addEventListener('click', () => {
-  // toggle in UI
-  const iframe = (player && player.getIframe) ? player.getIframe() : document.querySelector('#yt-player iframe');
-  if(iframe) {
-    const cur = iframe.style.objectFit || 'cover';
-    const next = cur === 'cover' ? 'contain' : 'cover';
-    iframe.style.objectFit = next;
-    btnAspect.textContent = (next === 'cover') ? '↔︎' : '⬚';
-  }
-});
-btnShare.addEventListener('click', shareVideo);
-
-/* ---------- settings (playback rate) ---------- */
-async function showSettingsMenu(){
+/* expose toggleAspect using setSize */
+function toggleAspectMode(){
   if(!player) return;
-  settingsModal.innerHTML = ''; settingsModal.style.display = 'block';
-  // try to get available rates
-  let rates = [];
-  try { rates = player.getAvailablePlaybackRates ? player.getAvailablePlaybackRates() : []; } catch(e){ rates = [1,1.5,2]; }
-  if(!rates || rates.length===0) rates = [1,1.25,1.5,2];
-  rates.forEach(r => {
-    const btn = document.createElement('button');
-    btn.textContent = r + '×';
-    btn.addEventListener('click', () => { setPlaybackRate(r); settingsModal.style.display='none'; });
-    settingsModal.appendChild(btn);
-  });
-  // close area: click outside modal will hide
-  setTimeout(()=> window.addEventListener('click', hideSettingsOnClickOutside));
+  // compute contain vs cover based on stored mode attribute
+  const mode = btnAspect.getAttribute('data-mode') || 'cover';
+  const newMode = (mode === 'cover') ? 'contain' : 'cover';
+  btnAspect.setAttribute('data-mode', newMode);
+  btnAspect.textContent = (newMode === 'cover') ? '↔︎' : '⬚';
+  applyAspectMode(newMode);
 }
-function hideSettingsOnClickOutside(ev){
-  const inside = settingsModal.contains(ev.target) || ev.target === btnSettings;
-  if(!inside){ settingsModal.style.display='none'; window.removeEventListener('click', hideSettingsOnClickOutside);}
-}
-
-/* ---------- share implementation ---------- */
-function shareVideo(){
-  const url = location.origin + location.pathname + '?videoId=' + encodeURIComponent(videoId);
-  if(navigator.share){
-    navigator.share({ title:'Watch', url }).catch(()=>{ /* ignore */ });
+function applyAspectMode(mode){
+  const pw = document.getElementById('playerWrap');
+  const w = pw.clientWidth;
+  const h = pw.clientHeight;
+  if(mode === 'cover'){
+    // set iframe size to fill container (setSize to container dimensions)
+    try { player.setSize(w, h); } catch(e){}
   } else {
-    // fallback: copy to clipboard
-    navigator.clipboard?.writeText(url).then(()=> { alert('Link copied to clipboard'); }).catch(()=> { prompt('Copy link', url); });
+    // contain: letterbox to 16:9 inside container
+    const targetAspect = 16/9;
+    let newW = w, newH = Math.round(newW / targetAspect);
+    if(newH > h){ newH = h; newW = Math.round(newH * targetAspect); }
+    try { player.setSize(newW, newH); } catch(e){}
   }
 }
+/* make available to native/kotlin */
+window.toggleAspect = toggleAspectMode;
+window.YTplayer = { playVideo, pauseVideo, seekTo, getCurrentTime, getDuration, setPlaybackRate, mute, unMute, setVolumePercent, toggleAspect };
 
-/* ---------- small async helpers ---------- */
-function getPlayerStateThen(cb){ try{ cb(player ? player.getPlayerState() : -2); }catch(e){ cb(-2); } }
-function getCurrentTimeThen(cb){ try{ cb(player ? player.getCurrentTime() : 0); }catch(e){ cb(0); } }
+/* ========== control wiring ========== */
+btnPlay.addEventListener('click', ()=> getPlayerStateThen(s => s===1 ? pauseVideo() : playVideo()));
+btnRewind.addEventListener('click', ()=> getCurrentTimeThen(t => seekTo(Math.max(0, t - SEEK_DOUBLE_TAP_SEC))));
+btnForward.addEventListener('click', ()=> getCurrentTimeThen(t => seekTo(t + SEEK_DOUBLE_TAP_SEC)));
+btnMute.addEventListener('click', ()=> { if(isMuted){ unMute(); player.setVolume(50); } else { mute(); } isMuted = !isMuted; updateUI(); });
+btnSpeed.addEventListener('click', openSettingsAtSpeed);
+btnAspect.addEventListener('click', ()=> { toggleAspectMode(); showControlsTemporarily(); });
+btnSettings.addEventListener('click', toggleSettingsPopup);
+replayBtn.addEventListener('click', ()=> { if(player) { player.seekTo(0, true); player.playVideo(); hideEndOverlay(); } });
 
-/* ---------- HUD helpers ---------- */
-let seekTimeout = null;
-function showSeekPreview(text){
-  seekPreview.style.display = 'block';
-  seekPreview.textContent = text;
-  if(seekTimeout) clearTimeout(seekTimeout);
-  seekTimeout = setTimeout(()=> seekPreview.style.display='none', 900);
+/* settings popup */
+function toggleSettingsPopup(e){
+  if(settingsPopup.style.display === 'block') { settingsPopup.style.display = 'none'; }
+  else {
+    populateSpeedOptions();
+    populateQualityOptions();
+    settingsPopup.style.display = 'block';
+    // close when clicking outside
+    setTimeout(()=> {
+      const off = (evt) => { if(!settingsPopup.contains(evt.target) && evt.target !== btnSettings) { settingsPopup.style.display='none'; document.removeEventListener('click', off); } };
+      document.addEventListener('click', off);
+    }, 10);
+  }
+}
+function openSettingsAtSpeed(){ toggleSettingsPopup(); }
+
+/* populate settings options */
+function populateSpeedOptions(){
+  speedOptions.innerHTML = '';
+  const speeds = [0.5,0.75,1,1.25,1.5,2];
+  let cur = 1;
+  try{ cur = (player && player.getPlaybackRate) ? player.getPlaybackRate() : 1 }catch(e){}
+  speeds.forEach(s => {
+    const btn = document.createElement('button');
+    btn.textContent = s + '×';
+    btn.style.fontWeight = (Math.abs(s - cur) < 0.001) ? '700' : '400';
+    btn.addEventListener('click', ()=> { setPlaybackRate(s); populateSpeedOptions(); });
+    speedOptions.appendChild(btn);
+  });
+}
+function populateQualityOptions(){
+  qualityOptions.innerHTML = '';
+  let levels = [];
+  try { levels = player.getAvailableQualityLevels ? player.getAvailableQualityLevels() : [] } catch(e){ levels = [] }
+  if(!levels || levels.length===0) levels = ['hd1080','hd720','large','medium','small'];
+  let cur = '';
+  try { cur = player.getPlaybackQuality ? player.getPlaybackQuality() : '' } catch(e){}
+  levels.forEach(q => {
+    const btn = document.createElement('button');
+    btn.textContent = q;
+    btn.style.fontWeight = (q === cur) ? '700' : '400';
+    btn.addEventListener('click', ()=> { try{ if(player.setPlaybackQuality) player.setPlaybackQuality(q); }catch(e){} populateQualityOptions(); });
+    qualityOptions.appendChild(btn);
+  });
 }
 
-let volHudTimer = null, brightHudTimer = null;
-function showVolumeHUD(percent){
-  volFill.style.width = Math.max(0, Math.min(100, percent)) + '%';
-  volumeHUD.style.display = 'block';
-  if(volHudTimer) clearTimeout(volHudTimer);
-  volHudTimer = setTimeout(()=> volumeHUD.style.display='none', 900);
+/* ========== scrubber logic (pointer friendly) ========== */
+let isPointerDown = false, scrubRect = null;
+progressBar.addEventListener('pointerdown', (e)=>{ isPointerDown=true; scrubRect = progressBar.getBoundingClientRect(); handleScrubPointer(e); document.documentElement.style.touchAction='none'; showControlsTemporarily(); });
+window.addEventListener('pointermove', (e)=>{ if(isPointerDown) handleScrubPointer(e); });
+window.addEventListener('pointerup', (e)=>{ if(isPointerDown){ commitScrub(e); isPointerDown=false; scrubRect=null; thumbPreview.style.display='none'; document.documentElement.style.touchAction=''; } });
+
+function handleScrubPointer(e){
+  if(!scrubRect) scrubRect = progressBar.getBoundingClientRect();
+  let x = Math.min(scrubRect.right, Math.max(scrubRect.left, e.clientX));
+  let pct = (x - scrubRect.left) / scrubRect.width;
+  const dur = getDuration() || 0;
+  const t = Math.round(pct * dur);
+  positionThumb(x);
+  showThumb(t);
+  progressFill.style.width = (pct*100) + '%';
+  progressHandle.style.left = (pct*100) + '%';
 }
-function showBrightnessHUD(percent){
-  brightFill.style.width = Math.max(0, Math.min(100, percent)) + '%';
-  brightnessHUD.style.display = 'block';
-  if(brightHudTimer) clearTimeout(brightHudTimer);
-  brightHudTimer = setTimeout(()=> brightnessHUD.style.display='none', 900);
+function commitScrub(e){
+  if(!scrubRect) return;
+  let x = Math.min(scrubRect.right, Math.max(scrubRect.left, e.clientX));
+  let pct = (x - scrubRect.left) / scrubRect.width;
+  const dur = getDuration() || 0;
+  const t = Math.round(pct * dur);
+  seekTo(t);
+  showThumbMessage(formatHHMMSS(t));
+}
+function positionThumb(screenX){
+  const wrap = progressBar.getBoundingClientRect();
+  const local = Math.min(Math.max(screenX - wrap.left, 40), wrap.width - 40);
+  const globalLeft = (wrap.left + local);
+  const pct = (globalLeft / window.innerWidth) * 100;
+  thumbPreview.style.left = pct + 'vw';
+  thumbPreview.style.display = 'block';
+}
+function showThumb(sec){
+  const urls = [
+    `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`,
+    `https://i.ytimg.com/vi/${videoId}/sddefault.jpg`,
+    `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+    `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`,
+    `https://i.ytimg.com/vi/${videoId}/default.jpg`
+  ];
+  // try maxres first; rely on browser fallback to 404 -> onerror attempt
+  thumbImg.src = urls[0];
+  thumbImg.onerror = function(){
+    for(let i=1;i<urls.length;i++){
+      const test = new Image(); test.src = urls[i];
+      test.onload = (function(u){ return function(){ thumbImg.src = u; thumbImg.onerror=null; }; })(urls[i]);
+    }
+  };
+  thumbTime.textContent = formatHHMMSS(sec);
+}
+function showThumbMessage(txt){
+  thumbPreview.style.display='block'; thumbTime.textContent = txt;
+  setTimeout(()=>{ thumbPreview.style.display='none'; }, 900);
 }
 
-/* ---------- gesture handling (touch) ---------- */
-let touchActive=false, startX=0, startY=0, accDx=0, accDy=0, seeking=false, adjustType=null, currentVolume=50;
-
+/* ========== gestures: double tap, vertical/horizontal drags ========== */
+let lastTouch=0,lastTouchX=0,lastTouchY=0,touchActive=false,startX=0,startY=0,accDx=0,accDy=0,seekingGesture=false,adjustType=null,currentVolume=50;
 function onTouchStart(e){
-  if(e.touches.length !== 1) return;
-  touchActive=true;
+  if(e.touches.length!==1) return;
   const t = e.touches[0];
-  startX = t.clientX; startY = t.clientY; accDx=0; accDy=0;
-
+  startX=t.clientX; startY=t.clientY; accDx=0; accDy=0; touchActive=true;
   const now = Date.now();
-  if(now - lastTap < 300 && Math.abs(lastTapX - startX) < 60 && Math.abs(lastTapY - startY) < 60){
-    // double tap
+  if(now - lastTouch < 300 && Math.abs(lastTouchX - startX) < 60 && Math.abs(lastTouchY - startY) < 60){
     const w = window.innerWidth;
-    if(startX < w*0.33){ getCurrentTimeThen(cur => { seekTo(Math.max(0,cur-SEEK_DOUBLE_TAP_SEC)); showSeekPreview(`-${SEEK_DOUBLE_TAP_SEC}s`); }); }
-    else if(startX > w*0.66){ getCurrentTimeThen(cur => { seekTo(cur+SEEK_DOUBLE_TAP_SEC); showSeekPreview(`+${SEEK_DOUBLE_TAP_SEC}s`); }); }
+    if(startX < w*0.33) { getCurrentTimeThen(cur => seekTo(Math.max(0,cur-SEEK_DOUBLE_TAP_SEC))); showThumbMessage('-' + SEEK_DOUBLE_TAP_SEC + 's'); }
+    else if(startX > w*0.66) { getCurrentTimeThen(cur => seekTo(cur+SEEK_DOUBLE_TAP_SEC)); showThumbMessage('+' + SEEK_DOUBLE_TAP_SEC + 's'); }
     else { getPlayerStateThen(s => s===1 ? pauseVideo() : playVideo()); }
-    lastTap = 0; e.preventDefault(); return;
+    lastTouch=0; e.preventDefault(); return;
   }
-  lastTap = now; lastTapX = startX; lastTapY = startY;
+  lastTouch = now; lastTouchX = startX; lastTouchY = startY;
+  showControlsTemporarily();
 }
-
 function onTouchMove(e){
   if(!touchActive) return;
   const t = e.touches[0];
-  const dx = t.clientX - startX; const dy = t.clientY - startY;
+  const dx = t.clientX - startX, dy = t.clientY - startY;
   accDx = dx; accDy = dy;
-  const absDx = Math.abs(dx), absDy = Math.abs(dy);
-
-  if(!seeking && !adjustType){
-    if(absDx > absDy && absDx > 12) seeking = true;
-    else if(absDy > absDx && absDy > 12) adjustType = (startX > window.innerWidth/2) ? 'volume' : 'brightness';
+  const adx = Math.abs(dx), ady = Math.abs(dy);
+  if(!seekingGesture && !adjustType){
+    if(adx > ady && adx > 12) seekingGesture = true;
+    else if(ady > adx && ady > 12) adjustType = (startX > window.innerWidth/2) ? 'volume' : 'brightness';
   }
-  if(seeking){
+  if(seekingGesture){
     const pct = dx / window.innerWidth;
     const delta = Math.round(pct * DRAG_MAX_SEEK);
-    showSeekPreview((delta>0?'+':'') + delta + 's');
+    showThumbMessage((delta>0?'+':'')+delta+'s');
+    progressFill.style.width = `${(pct+ (getCurrentTime()/getDuration()||0))*100}%`;
   } else if(adjustType){
-    const pct = -dy / window.innerHeight; // up positive
+    const pct = -dy / window.innerHeight;
     if(adjustType === 'volume'){
-      const change = pct * 100;
-      let v = currentVolume + change;
-      v = Math.max(0, Math.min(100, v));
-      setVolumePercent(v);
-      currentVolume = v;
-      showVolumeHUD(currentVolume);
+      const change = pct*100; let v = currentVolume + change; v = Math.max(0,Math.min(100, v));
+      setVolumePercent(v); currentVolume = v;
+      mainHud.style.display='block'; mainHud.textContent = 'Volume: ' + Math.round(currentVolume) + '%';
+      clearTimeout(window._hudHide); window._hudHide = setTimeout(()=> mainHud.style.display='none', 900);
     } else {
-      // brightness simulate: update brightFill (we still can't change system brightness from web)
-      const cur = parseFloat(brightFill.style.width) || 50;
-      // interpret cur as percent; change relative
-      let next = cur + pct*100;
-      next = Math.max(0, Math.min(100, next));
-      showBrightnessHUD(next);
-      // also dim background slightly to simulate (not system brightness)
-      document.getElementById('playerWrap').style.filter = `brightness(${0.6 + (next/100)*0.4})`;
+      let cur = parseFloat(getComputedStyle(document.getElementById('playerWrap')).filter || 1) || 1;
+      let brightness = cur + pct*0.2; brightness = Math.max(0.5, Math.min(1.2, brightness));
+      document.getElementById('playerWrap').style.filter = `brightness(${brightness})`;
+      mainHud.style.display='block'; mainHud.textContent = 'Brightness: ' + Math.round((brightness-0.5)/0.7*100) + '%';
+      clearTimeout(window._hudHide); window._hudHide = setTimeout(()=> mainHud.style.display='none', 900);
     }
   }
   e.preventDefault();
 }
-
 function onTouchEnd(e){
-  if(seeking){
-    const dx = accDx;
-    const pct = dx / window.innerWidth;
-    const delta = Math.round(pct * DRAG_MAX_SEEK);
-    getCurrentTimeThen(cur => {
-      const dest = Math.max(0, Math.min((getDuration() || 99999), Math.round(cur + delta)));
-      seekTo(dest);
-      showSeekPreview((delta>0?'+':'') + delta + 's');
-    });
+  if(seekingGesture){
+    const dx = accDx; const pct = dx / window.innerWidth; const delta = Math.round(pct * DRAG_MAX_SEEK);
+    getCurrentTimeThen(cur => { const dest = Math.max(0, Math.min((getDuration()||99999), Math.round(cur + delta))); seekTo(dest); showThumbMessage((delta>0?'+':'')+delta+'s') });
   }
-  touchActive=false; seeking=false; adjustType=null; accDx=0; accDy=0; lastTap=0;
+  touchActive=false; seekingGesture=false; adjustType=null; accDx=0; accDy=0; lastTouch=0;
 }
+document.getElementById('app').addEventListener('touchstart', onTouchStart, {passive:false});
+document.getElementById('app').addEventListener('touchmove', onTouchMove, {passive:false});
+document.getElementById('app').addEventListener('touchend', onTouchEnd, {passive:false});
+document.getElementById('app').addEventListener('touchcancel', onTouchEnd, {passive:false});
 
-/* hook events on app container */
-const app = document.getElementById('app');
-app.addEventListener('touchstart', onTouchStart, {passive:false});
-app.addEventListener('touchmove', onTouchMove, {passive:false});
-app.addEventListener('touchend', onTouchEnd, {passive:false});
-app.addEventListener('touchcancel', onTouchEnd, {passive:false});
+/* ========== auto-hide controls logic ========== */
+function showControlsTemporarily(){
+  controlsCenter.classList.add('visible');
+  if(controlsTimer) clearTimeout(controlsTimer);
+  controlsTimer = setTimeout(()=>{ controlsCenter.classList.remove('visible'); settingsPopup.style.display='none'; }, CONTROLS_HIDE_MS);
+}
+document.addEventListener('mousemove', showControlsTemporarily);
+document.addEventListener('touchstart', showControlsTemporarily);
+document.addEventListener('touchend', ()=> setTimeout(()=>{},0));
 
-/* ---------- periodic sync for HUD ---------- */
-setInterval(()=> {
-  try {
-    if(player) {
-      const dur = getDuration(); const cur = getCurrentTime();
-      mainHud.textContent = `${formatTime(Math.floor(cur))} / ${formatTime(Math.floor(dur))}`;
-      // sync currentVolume (if available)
-      currentVolume = (player && player.getVolume) ? (player.getVolume() || currentVolume) : currentVolume;
+/* ========== utility async getters ========== */
+function getPlayerStateThen(cb){ try{ cb(player ? player.getPlayerState() : -2) }catch(e){ cb(-2) } }
+function getCurrentTimeThen(cb){ try{ cb(player ? player.getCurrentTime() : 0) }catch(e){ cb(0) } }
+
+/* ========== requestAnimationFrame loop to update progress/time ========== */
+function rafLoop(){
+  try{
+    if(player && player.getCurrentTime){
+      const cur = getCurrentTime() || 0;
+      const dur = getDuration() || 0;
+      timeLeft.textContent = formatHHMMSS(Math.floor(cur));
+      timeRight.textContent = formatHHMMSS(Math.floor(dur));
+      mainHud.textContent = formatHHMMSS(Math.floor(cur)) + ' / ' + formatHHMMSS(Math.floor(dur));
+      const pct = (dur>0) ? Math.max(0, Math.min(1, cur/dur)) : 0;
+      progressFill.style.width = (pct*100) + '%';
+      progressHandle.style.left = (pct*100) + '%';
     }
-  } catch(e){ /* ignore */ }
-}, 800);
+  }catch(e){}
+  requestAnimationFrame(rafLoop);
+}
+requestAnimationFrame(rafLoop);
 
-/* ---------- util ---------- */
-function formatTime(s){ if(!s||s<0) return '0:00'; s=Math.floor(s); const m=Math.floor(s/60), sec=s%60; return m + ':' + (sec<10?'0':'')+sec; }
-function trySyncVolume(){ try{ if(player && player.getVolume) currentVolume = player.getVolume(); }catch(e){} }
+/* initial thumbnail */
+function getBestThumbnailUrl(id){ return `https://i.ytimg.com/vi/${id}/maxresdefault.jpg`; }
+thumbImg.src = getBestThumbnailUrl(videoId);
 
-/* ensure mainHud visible but subtle */
-mainHud.style.display = 'block'; mainHud.style.opacity = 0.95;
+/* initial sync */
+function trySync(){ try{ if(player && player.getVolume) currentVolume = player.getVolume(); }catch(e){} }
 
-/* on load remove skeleton after 10 sec fallback */
-window.addEventListener('load', ()=> {
-  setTimeout(()=>{ if(!player) hideSkeleton(); }, 10000);
-  debug('ready – videoId=' + videoId);
-});
+/* hide skeleton if YT doesn't load quickly */
+setTimeout(()=>{ if(!player) hideSkeleton(); }, 7000);
+
+/* show controls initially then hide */
+controlsCenter.classList.add('visible');
+setTimeout(()=> controlsCenter.classList.remove('visible'), 2800);
 </script>
 </body>
 </html>
