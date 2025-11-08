@@ -54,14 +54,21 @@
   .btn:hover{background:rgba(255,255,255,0.1)}
   /* settings popup */
   #settingsBtnWrap{position:absolute;right:12px;top:12px;z-index:80;pointer-events:auto}
-  #settingsPopup{position:absolute;right:0;top:calc(100% + 8px);background:rgba(18,18,18,0.98);backdrop-filter:blur(10px);padding:10px;border-radius:10px;display:none;min-width:220px;box-shadow:0 8px 24px rgba(0,0,0,0.6)}
-  .settingsItem{color:#fff;padding:8px 6px;border-radius:6px;display:flex;justify-content:space-between;align-items:center;font-size:14px}
-  .settingsItem button{background:transparent;border:0;color:#fff;padding:6px 10px;border-radius:6px;cursor:pointer;transition:all .2s}
+  #settingsPopup{position:absolute;right:0;top:calc(100% + 8px);background:rgba(18,18,18,0.98);backdrop-filter:blur(10px);padding:16px;border-radius:12px;display:none;min-width:240px;box-shadow:0 8px 24px rgba(0,0,0,0.6);font-size:14px}
+  .settingsSection{margin-bottom:16px}
+  .settingsSection:last-child{margin-bottom:0}
+  .settingsTitle{font-weight:700;margin-bottom:8px;color:#fff}
+  .settingsItem{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.1);font-size:14px}
+  .settingsItem:last-child{border-bottom:none}
+  .settingsItem label{flex:1;color:#ccc}
+  .settingsItem .options{display:flex;gap:4px;flex-wrap:wrap}
+  .settingsItem button{background:transparent;border:0;color:#fff;padding:6px 12px;border-radius:6px;cursor:pointer;transition:all .2s;font-size:12px;white-space:nowrap}
   .settingsItem button:hover{background:var(--muted)}
   .settingsItem button.active{font-weight:700;color:var(--accent)}
+  .auto-info{color:#999;font-size:12px;text-align:center;padding:8px 0}
   /* end overlay (hidden) */
   #endOverlay{position:absolute;inset:0;background:linear-gradient(to top, rgba(0,0,0,0.65), rgba(0,0,0,0.2));display:none;z-index:95;align-items:center;justify-content:center;flex-direction:column;gap:12px}
-  @media (max-width:480px){ #thumbPreview .thumb{width:120px;height:68px} #aspectRow{gap:5px;font-size:11px} .aspect-btn{font-size:12px;padding:4px 8px} }
+  @media (max-width:480px){ #thumbPreview .thumb{width:120px;height:68px} #aspectRow{gap:5px;font-size:11px} .aspect-btn{font-size:12px;padding:4px 8px} #settingsPopup{min-width:200px;padding:12px} }
 </style>
 </head>
 <body>
@@ -109,10 +116,20 @@
     <div id="settingsBtnWrap">
       <button class="btn small" id="btnSettings" title="Settings">⚙︎</button>
       <div id="settingsPopup" role="dialog" aria-modal="false">
-        <div style="font-weight:700;margin-bottom:6px">Playback</div>
-        <div class="settingsItem"><div>Playback speed</div><div id="speedOptions"></div></div>
-        <div style="height:8px"></div>
-        <div class="settingsItem"><div>Quality</div><div id="qualityOptions"></div></div>
+        <div class="settingsSection">
+          <div class="settingsTitle">Playback Speed</div>
+          <div class="settingsItem">
+            <label>Speed</label>
+            <div class="options" id="speedOptions"></div>
+          </div>
+        </div>
+        <div class="settingsSection">
+          <div class="settingsTitle">Quality</div>
+          <div class="settingsItem">
+            <label>Resolution</label>
+            <div class="auto-info">Auto (managed by YouTube)</div>
+          </div>
+        </div>
       </div>
     </div>
     <!-- small end-screen overlay to block YT suggestions -->
@@ -138,7 +155,7 @@ const thumbPreview=document.getElementById('thumbPreview'), thumbImg=document.ge
 const btnPlay=document.getElementById('btnPlay'), btnRewind=document.getElementById('btnRewind'), btnForward=document.getElementById('btnForward');
 const btnMute=document.getElementById('btnMute'), btnSpeed=document.getElementById('btnSpeed'), btnCaptions=document.getElementById('btnCaptions');
 const btnSettings=document.getElementById('btnSettings'), settingsPopup=document.getElementById('settingsPopup');
-const speedOptions=document.getElementById('speedOptions'), qualityOptions=document.getElementById('qualityOptions');
+const speedOptions=document.getElementById('speedOptions');
 const controlsCenter=document.getElementById('controlsCenter'), endOverlay=document.getElementById('endOverlay'), replayBtn=document.getElementById('replayBtn');
 const aspectBtns=document.querySelectorAll('.aspect-btn');
 let player=null, videoId=(new URLSearchParams(location.search)).get('videoId')||DEFAULT_ID;
@@ -194,7 +211,7 @@ function onPlayerReady(evt){
   skeleton.style.display='none';
   try{ evt.target.playVideo(); }catch(e){}
   try{ player.unMute(); player.setVolume(currentVolume); isMuted=false; updateUI(); }catch(e){}
-  populateSpeedOptions(); populateQualityOptions();
+  populateSpeedOptions();
   setAspect(currentAspect);
   showControlsTemporarily();
   thumbImg.src = `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`;
@@ -221,7 +238,7 @@ btnMute.addEventListener('click', ()=>{
   if(isMuted){ unMute(); player.setVolume(currentVolume); isMuted=false; } else { mute(); isMuted=true; }
   updateUI(); showVolumeHud(currentVolume); showControlsTemporarily();
 });
-btnSpeed.addEventListener('click', ()=> openSettings('speed'));
+btnSpeed.addEventListener('click', toggleSettingsPopup);
 btnSettings.addEventListener('click', toggleSettingsPopup);
 replayBtn.addEventListener('click', ()=> { if(player){ player.seekTo(0); player.playVideo(); endOverlay.style.display='none' } });
 btnCaptions.addEventListener('click', ()=>{
@@ -260,34 +277,23 @@ function setVolumePercent(p){ currentVolume = Math.max(0,Math.min(100,Math.round
 function toggleSettingsPopup(e){
   if(settingsPopup.style.display==='block') { settingsPopup.style.display='none'; }
   else {
-    populateSpeedOptions(); populateQualityOptions();
+    populateSpeedOptions();
     settingsPopup.style.display='block';
     setTimeout(()=> {
-      const off=(ev)=>{ if(!settingsPopup.contains(ev.target) && ev.target !== btnSettings){ settingsPopup.style.display='none'; document.removeEventListener('click',off); } };
+      const off=(ev)=>{ if(!settingsPopup.contains(ev.target) && !btnSpeed.contains(ev.target) && !btnSettings.contains(ev.target)){ settingsPopup.style.display='none'; document.removeEventListener('click',off); } };
       document.addEventListener('click', off);
     }, 10);
   }
 }
-function openSettings(kind){ settingsPopup.style.display='block'; populateSpeedOptions(); populateQualityOptions(); }
-/* populate speed/quality */
+/* populate speed */
 function populateSpeedOptions(){
   speedOptions.innerHTML='';
   const speeds=[0.5,0.75,1,1.25,1.5,2];
   let cur=1; try{ cur = player.getPlaybackRate(); }catch(e){}
   speeds.forEach(s=>{
     const b=document.createElement('button'); b.textContent=s+'×'; b.classList.toggle('active',Math.abs(s-cur)<1e-6);
-    b.addEventListener('click', ()=>{ setPlaybackRate(s); populateSpeedOptions(); settingsPopup.style.display='none'; });
+    b.addEventListener('click', ()=>{ setPlaybackRate(s); populateSpeedOptions(); });
     speedOptions.appendChild(b);
-  });
-}
-function populateQualityOptions(){
-  qualityOptions.innerHTML='';
-  let levels=[]; try{ levels = player.getAvailableQualityLevels(); }catch(e){ levels=['auto','hd1080','hd720','large','medium','small']; }
-  let cur='auto'; try{ cur = player.getPlaybackQuality(); }catch(e){}
-  [...new Set(['auto',...levels])].forEach(q=>{
-    const b=document.createElement('button'); b.textContent=q; b.classList.toggle('active',q===cur);
-    b.addEventListener('click', ()=>{ try{ if(player.setPlaybackQuality) player.setPlaybackQuality(q); }catch(e){} populateQualityOptions(); settingsPopup.style.display='none'; });
-    qualityOptions.appendChild(b);
   });
 }
 /* ===== scrubber behavior (pointer & touch) ===== */
@@ -340,6 +346,7 @@ let lastTouch=0,lastTouchX=0,lastTouchY=0,touchActive=false,startX=0,startY=0,ac
 let pinchMode=false, pinchStartDist=0, pinchScale=1;
 function getDist(a,b){ const dx=a.clientX-b.clientX, dy=a.clientY-b.clientY; return Math.hypot(dx,dy); }
 function onTouchStart(e){
+  showControlsTemporarily();
   if(e.touches.length===2){
     pinchMode=true; pinchStartDist=getDist(e.touches[0], e.touches[1]); pinchScale=1; return;
   }
@@ -354,7 +361,7 @@ function onTouchStart(e){
     lastTouch=0; e.preventDefault(); return;
   }
   lastTouch=now; lastTouchX=startX; lastTouchY=startY;
-  showControlsTemporarily(); tryUnmuteOnGesture();
+  tryUnmuteOnGesture();
 }
 function onTouchMove(e){
   if(pinchMode && e.touches.length===2){ const d=getDist(e.touches[0], e.touches[1]); pinchScale = d / pinchStartDist; applyPinchScale(pinchScale); e.preventDefault(); return; }
@@ -411,6 +418,8 @@ app.addEventListener('touchstart', onTouchStart, {passive:false});
 app.addEventListener('touchmove', onTouchMove, {passive:false});
 app.addEventListener('touchend', onTouchEnd, {passive:false});
 app.addEventListener('touchcancel', onTouchEnd, {passive:false});
+app.addEventListener('pointerdown', showControlsTemporarily);
+app.addEventListener('click', showControlsTemporarily);
 /* try unmute on first real user gesture */
 function tryUnmuteOnGesture(){
   try{ player.unMute(); player.setVolume(currentVolume); isMuted=false; updateUI(); }catch(e){}
@@ -423,7 +432,6 @@ function showControlsTemporarily(){
   controlsTimer = setTimeout(()=>{ app.classList.remove('controls-visible'); controlsCenter.classList.remove('visible'); }, CONTROLS_HIDE_MS);
 }
 document.addEventListener('mousemove', showControlsTemporarily);
-document.addEventListener('touchstart', showControlsTemporarily);
 /* update loop for times/progress */
 function rafLoop(){
   try{
