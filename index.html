@@ -3,101 +3,152 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Soniq — Minimal Player</title>
+<title>Soniq — Android Player</title>
 <style>
-  :root{--accent:#e50914;--fg:#fff;}
-  html,body{margin:0;height:100%;background:#000;color:var(--fg);overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial;}
-  #playerWrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#000;}
-  #yt-player{width:100%;height:100%;}
-  /* Center seek HUD */
-  #seekHud{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%) scale(1);
-    background:rgba(0,0,0,0.75);color:#fff;padding:12px 18px;border-radius:12px;
-    font-weight:600;font-size:16px;text-align:center;display:none;opacity:0;
-    transition:opacity .2s,transform .2s;z-index:10;}
+  html,body{
+    margin:0;height:100%;overflow:hidden;background:#000;color:#fff;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial;
+  }
+  #playerWrap{position:absolute;inset:0;background:#000;}
+  #yt-player{width:100%;height:100%;background:#000;}
+  /* HUDs */
+  #seekHud{
+    position:fixed;left:50%;top:50%;transform:translate(-50%,-50%) scale(1);
+    background:rgba(0,0,0,0.7);padding:10px 18px;border-radius:10px;
+    color:#fff;font-weight:600;text-align:center;display:none;opacity:0;
+    transition:opacity .2s,transform .2s;z-index:10;
+  }
   #seekHud.visible{display:block;opacity:1;transform:translate(-50%,-50%) scale(1.05);}
-  /* Volume / brightness HUDs */
-  .hudBox{position:fixed;top:50%;transform:translateY(-50%);
-    background:rgba(0,0,0,0.75);padding:10px 14px;border-radius:10px;
-    color:#fff;font-size:14px;display:none;align-items:center;gap:8px;opacity:0;
-    transition:opacity .2s;z-index:10;}
+  .hudBox{
+    position:fixed;top:50%;transform:translateY(-50%);
+    background:rgba(0,0,0,0.7);padding:8px 12px;border-radius:10px;
+    color:#fff;font-size:14px;display:none;align-items:center;gap:6px;
+    opacity:0;transition:opacity .2s;z-index:10;
+  }
   .hudBox.visible{display:flex;opacity:1;}
   #vHud{right:20px;} #bHud{left:20px;}
   .hudBar{width:4px;height:100px;background:rgba(255,255,255,0.2);border-radius:2px;}
   .hudBarFill{width:100%;height:50%;background:#fff;border-radius:2px;transition:height .1s;}
-  /* Aspect buttons */
-  #aspectRow{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);
-    display:flex;gap:10px;z-index:20;}
-  .aspect-btn{background:rgba(255,255,255,0.1);border:0;color:#fff;
-    padding:6px 10px;border-radius:6px;cursor:pointer;font-size:13px;}
-  .aspect-btn.active{background:var(--accent);}
 </style>
 </head>
 <body>
   <div id="playerWrap"><div id="yt-player"></div></div>
 
+  <!-- HUD overlays -->
   <div id="seekHud">00:00:00 / 00:00:00<br>[ +0 s ]</div>
   <div id="vHud" class="hudBox"><span>🔊</span><div class="hudBar"><div class="hudBarFill" id="vFill"></div></div></div>
   <div id="bHud" class="hudBox"><span>🌞</span><div class="hudBar"><div class="hudBarFill" id="bFill"></div></div></div>
 
-  <div id="aspectRow">
-    <button class="aspect-btn active" data-size="100%,100%">Fit Window</button>
-    <button class="aspect-btn" data-size="1280,720">1280×720</button>
-    <button class="aspect-btn" data-size="1920,1080">1080p</button>
-  </div>
-
 <script>
-const DEFAULT_ID="dQw4w9WgXcQ";
-let player,currentVol=50,startX=0,startY=0,adjustType=null,seeking=false,brightness=1;
-const seekHud=document.getElementById('seekHud');
-const vHud=document.getElementById('vHud'),bHud=document.getElementById('bHud');
-const vFill=document.getElementById('vFill'),bFill=document.getElementById('bFill');
-/* ===== Load API ===== */
-(function(){const s=document.createElement('script');s.src="https://www.youtube.com/iframe_api";document.head.appendChild(s);})();
+/* ============ Setup ============ */
+const params = new URLSearchParams(location.search);
+const videoId = params.get('videoId') || 'dQw4w9WgXcQ'; // fallback for testing
+let player, brightness = 1, currentVol = 50;
+let startX = 0, startY = 0, adjustType = null;
+const seekHud = document.getElementById('seekHud');
+const vHud = document.getElementById('vHud'), bHud = document.getElementById('bHud');
+const vFill = document.getElementById('vFill'), bFill = document.getElementById('bFill');
+
+/* ============ Load YouTube API ============ */
+(function(){
+  const tag = document.createElement('script');
+  tag.src = "https://www.youtube.com/iframe_api";
+  document.head.appendChild(tag);
+})();
 function onYouTubeIframeAPIReady(){
-  player=new YT.Player('yt-player',{
-    videoId:DEFAULT_ID,
-    playerVars:{controls:1,rel:0,modestbranding:1,playsinline:1,enablejsapi:1,iv_load_policy:3},
+  player = new YT.Player('yt-player',{
+    videoId: videoId,
+    playerVars:{
+      controls:1,rel:0,modestbranding:1,playsinline:1,enablejsapi:1,iv_load_policy:3,
+      fs:0,disablekb:0,showinfo:0
+    },
     events:{onReady:onPlayerReady}
   });
 }
-function onPlayerReady(){player.playVideo();player.setVolume(currentVol);}
-function fmt(sec){sec=Math.max(0,Math.floor(sec));const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;
- return (h>0?h.toString().padStart(2,'0')+':':'')+m.toString().padStart(2,'0')+':'+s.toString().padStart(2,'0');}
-/* ===== HUD helpers ===== */
+function onPlayerReady(){
+  player.setVolume(currentVol);
+  player.playVideo();
+}
+
+/* ============ Helpers ============ */
+function fmt(sec){
+  sec = Math.max(0,Math.floor(sec||0));
+  const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;
+  return (h>0?h.toString().padStart(2,'0')+':':'')+
+         m.toString().padStart(2,'0')+':'+s.toString().padStart(2,'0');
+}
 function showSeekHud(cur,dur,delta){
   seekHud.innerHTML=`${fmt(cur)} / ${fmt(dur)}<br>[ ${delta>0?'+':''}${delta}s ]`;
   seekHud.classList.add('visible');
-  clearTimeout(seekHud._t); seekHud._t=setTimeout(()=>seekHud.classList.remove('visible'),800);
+  clearTimeout(seekHud._t);
+  seekHud._t=setTimeout(()=>seekHud.classList.remove('visible'),900);
 }
-function showVolHud(v){vFill.style.height=v+'%';vHud.classList.add('visible');clearTimeout(vHud._t);vHud._t=setTimeout(()=>vHud.classList.remove('visible'),800);}
-function showBrightHud(p){bFill.style.height=p+'%';bHud.classList.add('visible');clearTimeout(bHud._t);bHud._t=setTimeout(()=>bHud.classList.remove('visible'),800);}
-/* ===== Gestures ===== */
+function showVolHud(v){
+  vFill.style.height=v+'%';
+  vHud.classList.add('visible');
+  clearTimeout(vHud._t);
+  vHud._t=setTimeout(()=>vHud.classList.remove('visible'),900);
+}
+function showBrightHud(p){
+  bFill.style.height=p+'%';
+  bHud.classList.add('visible');
+  clearTimeout(bHud._t);
+  bHud._t=setTimeout(()=>bHud.classList.remove('visible'),900);
+}
+
+/* ============ Gestures ============ */
 document.body.addEventListener('touchstart',e=>{
- if(e.touches.length!==1)return;
- startX=e.touches[0].clientX; startY=e.touches[0].clientY; adjustType=null; seeking=false;
-});
+  if(e.touches.length!==1) return;
+  startX = e.touches[0].clientX;
+  startY = e.touches[0].clientY;
+  adjustType = null;
+},{passive:true});
+
 document.body.addEventListener('touchmove',e=>{
- const t=e.touches[0];const dx=t.clientX-startX,dy=t.clientY-startY;
- if(!adjustType){if(Math.abs(dx)>Math.abs(dy))adjustType='seek';else adjustType=(startX>window.innerWidth/2)?'volume':'brightness';}
- if(adjustType==='seek'){const dur=player.getDuration(),cur=player.getCurrentTime(),delta=Math.round(dx/window.innerWidth*120);
-  const preview=Math.max(0,Math.min(dur,cur+delta));showSeekHud(preview,dur,delta);}
- else if(adjustType==='volume'){let v=player.getVolume()+(-dy/window.innerHeight*100);v=Math.max(0,Math.min(100,v));player.setVolume(v);showVolHud(v);}
- else if(adjustType==='brightness'){brightness+=(-dy/window.innerHeight*0.5);brightness=Math.max(0.5,Math.min(1.6,brightness));
-  document.getElementById('yt-player').style.filter=`brightness(${brightness})`;showBrightHud((brightness-0.5)/1.1*100);}
- e.preventDefault();
+  const t = e.touches[0];
+  const dx = t.clientX - startX;
+  const dy = t.clientY - startY;
+
+  if(!adjustType){
+    if(Math.abs(dx) > Math.abs(dy))
+      adjustType = 'seek';
+    else
+      adjustType = (startX > window.innerWidth/2) ? 'volume' : 'brightness';
+  }
+
+  if(adjustType === 'seek'){
+    const dur = player.getDuration() || 0;
+    const cur = player.getCurrentTime() || 0;
+    const delta = Math.round(dx / window.innerWidth * 120);
+    const preview = Math.max(0, Math.min(dur, cur + delta));
+    showSeekHud(preview, dur, delta);
+  }
+  else if(adjustType === 'volume'){
+    let v = player.getVolume() + (-dy / window.innerHeight * 100);
+    v = Math.max(0, Math.min(100, v));
+    player.setVolume(v);
+    showVolHud(v);
+  }
+  else if(adjustType === 'brightness'){
+    brightness += (-dy / window.innerHeight * 0.5);
+    brightness = Math.max(0.5, Math.min(1.6, brightness));
+    document.getElementById('yt-player').style.filter = `brightness(${brightness})`;
+    showBrightHud((brightness - 0.5) / 1.1 * 100);
+  }
+  e.preventDefault();
 },{passive:false});
+
 document.body.addEventListener('touchend',e=>{
- if(adjustType==='seek'){const dx=e.changedTouches[0].clientX-startX;const dur=player.getDuration(),cur=player.getCurrentTime();
-  const delta=Math.round(dx/window.innerWidth*120);player.seekTo(Math.max(0,Math.min(dur,cur+delta)),true);}
- adjustType=null;
-});
-/* ===== Aspect ratio buttons ===== */
-document.querySelectorAll('.aspect-btn').forEach(btn=>{
- btn.onclick=()=>{
-  document.querySelectorAll('.aspect-btn').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  const [w,h]=btn.dataset.size.split(',');player.setSize(w==='100%'?window.innerWidth:parseInt(w),h==='100%'?window.innerHeight:parseInt(h));
- };
+  if(adjustType === 'seek'){
+    const dx = e.changedTouches[0].clientX - startX;
+    const dur = player.getDuration() || 0;
+    const cur = player.getCurrentTime() || 0;
+    const delta = Math.round(dx / window.innerWidth * 120);
+    const dest = Math.max(0, Math.min(dur, cur + delta));
+    player.seekTo(dest, true);
+    showSeekHud(dest, dur, delta);
+  }
+  adjustType = null;
 });
 </script>
 </body>
