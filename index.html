@@ -3,59 +3,360 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-<title>Soniq — Android Player (Refined)</title>
+<title>Soniq — Immersive Android Player</title>
 <style>
-  html,body{
-    margin:0;height:100%;overflow:hidden;background:#000;color:#fff;
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial;
+  * {
+    box-sizing: border-box;
   }
-  #playerWrap{position:relative;width:100%;height:100%;background:#000;}
-  #yt-player{width:100%;height:100%;background:#000;position:relative;z-index:1;}
+  
+  html, body {
+    margin: 0; 
+    height: 100%; 
+    overflow: hidden; 
+    background: #000; 
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    touch-action: manipulation;
+  }
+  
+  #playerWrap {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  
+  #yt-player {
+    width: 100%;
+    height: 100%;
+    background: #000;
+    position: relative;
+    z-index: 1;
+  }
+  
   /* gesture zone: safe middle area */
-  #gestureZone{
-    position:absolute;left:0;right:0;
-    top:var(--top,15%);bottom:var(--bottom,15%);
-    z-index:5;touch-action:none;
+  #gestureZone {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: var(--top, 15%);
+    bottom: var(--bottom, 15%);
+    z-index: 5;
+    touch-action: none;
   }
+  
   /* HUDs */
-  #seekHud{
-    position:absolute;left:50%;top:50%;
-    transform:translate(-50%,-50%) scale(1);
-    background:rgba(0,0,0,0.75);padding:12px 18px;border-radius:12px;
-    font-weight:600;font-size:16px;text-align:center;display:none;opacity:0;
-    transition:opacity .2s,transform .2s;z-index:10;
+  #seekHud {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%) scale(1);
+    background: rgba(0, 0, 0, 0.75);
+    padding: 12px 18px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 16px;
+    text-align: center;
+    display: none;
+    opacity: 0;
+    transition: opacity .2s, transform .2s;
+    z-index: 10;
   }
-  #seekHud.visible{display:block;opacity:1;transform:translate(-50%,-50%) scale(1.05);}
-  .hudBox{
-    position:absolute;top:50%;transform:translateY(-50%);
-    background:rgba(0,0,0,0.75);padding:10px 14px;border-radius:10px;
-    color:#fff;font-size:14px;display:none;align-items:center;gap:8px;
-    opacity:0;transition:opacity .2s;z-index:10;
+  
+  #seekHud.visible {
+    display: block;
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.05);
   }
-  .hudBox.visible{display:flex;opacity:1;}
-  #vHud{right:20px;}  /* volume HUD shows on right */
-  #bHud{left:20px;}   /* brightness HUD shows on left */
-  .hudBar{
-    width:4px;height:100px;background:rgba(255,255,255,0.2);
-    border-radius:2px;overflow:hidden;display:flex;align-items:flex-end;
+  
+  .hudBox {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(0, 0, 0, 0.75);
+    padding: 10px 14px;
+    border-radius: 10px;
+    color: #fff;
+    font-size: 14px;
+    display: none;
+    align-items: center;
+    gap: 8px;
+    opacity: 0;
+    transition: opacity .2s;
+    z-index: 10;
   }
-  .hudBarFill{
-    width:100%;height:50%;background:#fff;border-radius:2px 2px 0 0;
-    transition:height .1s;
+  
+  .hudBox.visible {
+    display: flex;
+    opacity: 1;
+  }
+  
+  #vHud {
+    right: 20px;
+  }
+  
+  /* volume HUD shows on right */
+  #bHud {
+    left: 20px;
+  }
+  
+  /* brightness HUD shows on left */
+  .hudBar {
+    width: 4px;
+    height: 100px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+    overflow: hidden;
+    display: flex;
+    align-items: flex-end;
+  }
+  
+  .hudBarFill {
+    width: 100%;
+    height: 50%;
+    background: #fff;
+    border-radius: 2px 2px 0 0;
+    transition: height .1s;
+  }
+  
+  /* Custom Controls */
+  #customControls {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+    padding: 20px 15px 15px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 20px;
+    z-index: 20;
+    transition: opacity 0.3s, transform 0.3s;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(100%);
+  }
+  
+  #customControls.visible {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+  
+  .control-btn {
+    background: rgba(30, 30, 30, 0.8);
+    border: none;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  }
+  
+  .control-btn:active {
+    transform: scale(0.95);
+  }
+  
+  .control-btn:hover {
+    background: rgba(50, 50, 50, 0.9);
+  }
+  
+  /* Aspect ratio menu */
+  #aspectMenu {
+    position: absolute;
+    bottom: 70px;
+    background: rgba(30, 30, 30, 0.95);
+    border-radius: 10px;
+    padding: 8px 0;
+    display: none;
+    flex-direction: column;
+    z-index: 25;
+    min-width: 140px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+  }
+  
+  #aspectMenu.visible {
+    display: flex;
+  }
+  
+  .aspect-option {
+    padding: 12px 18px;
+    color: white;
+    background: none;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    font-size: 15px;
+    transition: background 0.2s;
+  }
+  
+  .aspect-option:hover, .aspect-option:active {
+    background: rgba(255, 255, 255, 0.1);
+  }
+  
+  /* Navigation controls */
+  #navControls {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 15px 15px 10px;
+    background: linear-gradient(rgba(0, 0, 0, 0.7), transparent);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 20;
+    transition: opacity 0.3s, transform 0.3s;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-100%);
+  }
+  
+  #navControls.visible {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+  
+  .nav-btn {
+    background: rgba(30, 30, 30, 0.8);
+    border: none;
+    border-radius: 6px;
+    padding: 10px 15px;
+    color: white;
+    font-size: 15px;
+    cursor: pointer;
+    transition: background 0.2s;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+  
+  .nav-btn:hover {
+    background: rgba(50, 50, 50, 0.9);
+  }
+  
+  #videoTitle {
+    font-weight: 600;
+    font-size: 16px;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+    max-width: 60%;
+  }
+  
+  /* Middle play/pause indicator */
+  #middleIndicator {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.7);
+    border-radius: 50%;
+    width: 80px;
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 36px;
+    z-index: 15;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+    backdrop-filter: blur(5px);
+  }
+  
+  #middleIndicator.visible {
+    opacity: 1;
+  }
+  
+  /* Center tap area for play/pause */
+  #centerTapArea {
+    position: absolute;
+    left: 25%;
+    right: 25%;
+    top: 25%;
+    bottom: 25%;
+    z-index: 6;
+    /* background: rgba(255, 0, 0, 0.1); */ /* Uncomment for debugging */
+  }
+  
+  /* Immersive fullscreen styles */
+  .immersive-mode #yt-player {
+    object-fit: cover !important;
+  }
+  
+  /* Loading spinner */
+  #loadingSpinner {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 50px;
+    height: 50px;
+    border: 4px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: spin 1s ease-in-out infinite;
+    z-index: 30;
+    display: none;
+  }
+  
+  @keyframes spin {
+    to { transform: translate(-50%, -50%) rotate(360deg); }
   }
 </style>
 </head>
 <body>
   <div id="playerWrap">
     <div id="yt-player"></div>
+    
+    <!-- Loading indicator -->
+    <div id="loadingSpinner"></div>
 
     <!-- gesture zone between title and progress bar -->
     <div id="gestureZone"></div>
+    
+    <!-- Center tap area for play/pause -->
+    <div id="centerTapArea"></div>
 
     <!-- HUD overlays -->
     <div id="seekHud">00:00:00 / 00:00:00<br>[ +0 s ]</div>
     <div id="vHud" class="hudBox"><span>🔊</span><div class="hudBar"><div class="hudBarFill" id="vFill"></div></div></div>
     <div id="bHud" class="hudBox"><span>🌞</span><div class="hudBar"><div class="hudBarFill" id="bFill"></div></div></div>
+    
+    <!-- Navigation controls -->
+    <div id="navControls">
+      <button class="nav-btn" id="backBtn">← Back</button>
+      <div id="videoTitle">Video Player</div>
+      <button class="nav-btn" id="settingsBtn">⚙️</button>
+    </div>
+    
+    <!-- Middle play/pause indicator -->
+    <div id="middleIndicator">▶️</div>
+    
+    <!-- Custom bottom controls -->
+    <div id="customControls">
+      <button class="control-btn" id="playPauseBtn">⏸️</button>
+      <button class="control-btn" id="aspectRatioBtn">📐</button>
+      <div id="aspectMenu">
+        <button class="aspect-option" data-ratio="fit">Fit Screen</button>
+        <button class="aspect-option" data-ratio="fill">Fill Screen</button>
+        <button class="aspect-option" data-ratio="original">Original</button>
+        <button class="aspect-option" data-ratio="16:9">16:9</button>
+        <button class="aspect-option" data-ratio="4:3">4:3</button>
+      </div>
+    </div>
   </div>
 
 <script>
@@ -74,132 +375,455 @@ document.documentElement.style.setProperty('--bottom', GESTURE_ZONE_BOTTOM + '%'
 const params = new URLSearchParams(location.search);
 const videoId = params.get("videoId") || "dQw4w9WgXcQ";
 
-let player, ready=false, brightness=1, currentVol=60;
-let startX=0,startY=0,gesture=null,lastTap=0,longPressTimer=null;
+let player, ready = false, brightness = 1, currentVol = 60;
+let startX = 0, startY = 0, gesture = null, lastTap = 0, longPressTimer = null;
+let controlsVisible = false;
+let aspectRatio = 'fit'; // Default aspect ratio
+let controlsTimeout;
 
-const seekHud=document.getElementById("seekHud");
-const vHud=document.getElementById("vHud"),bHud=document.getElementById("bHud");
-const vFill=document.getElementById("vFill"),bFill=document.getElementById("bFill");
-const gestureZone=document.getElementById("gestureZone");
+// UI Elements
+const seekHud = document.getElementById("seekHud");
+const vHud = document.getElementById("vHud"), bHud = document.getElementById("bHud");
+const vFill = document.getElementById("vFill"), bFill = document.getElementById("bFill");
+const gestureZone = document.getElementById("gestureZone");
+const customControls = document.getElementById("customControls");
+const navControls = document.getElementById("navControls");
+const playPauseBtn = document.getElementById("playPauseBtn");
+const aspectRatioBtn = document.getElementById("aspectRatioBtn");
+const aspectMenu = document.getElementById("aspectMenu");
+const middleIndicator = document.getElementById("middleIndicator");
+const backBtn = document.getElementById("backBtn");
+const settingsBtn = document.getElementById("settingsBtn");
+const centerTapArea = document.getElementById("centerTapArea");
+const loadingSpinner = document.getElementById("loadingSpinner");
+const playerWrap = document.getElementById("playerWrap");
 
 /* --- YouTube API --- */
 (function(){
-  const tag=document.createElement("script");
-  tag.src="https://www.youtube.com/iframe_api";
+  const tag = document.createElement("script");
+  tag.src = "https://www.youtube.com/iframe_api";
   document.head.appendChild(tag);
 })();
+
 function onYouTubeIframeAPIReady(){
-  player=new YT.Player("yt-player",{
-    videoId:videoId,
-    playerVars:{
-      autoplay:1,controls:1,rel:0,modestbranding:1,playsinline:1,
-      enablejsapi:1,iv_load_policy:3,fs:0,disablekb:1
+  loadingSpinner.style.display = 'block';
+  
+  player = new YT.Player("yt-player", {
+    videoId: videoId,
+    playerVars: {
+      autoplay: 1,
+      controls: 1,  // Keep native controls for specific areas
+      rel: 0,
+      modestbranding: 1,
+      playsinline: 1,
+      enablejsapi: 1,
+      iv_load_policy: 3,
+      fs: 1,  // Enable fullscreen
+      disablekb: 1
     },
-    events:{onReady:onPlayerReady}
+    events: {
+      onReady: onPlayerReady,
+      onStateChange: onPlayerStateChange,
+      onError: onPlayerError
+    }
   });
 }
+
 function onPlayerReady(){
-  ready=true;
+  ready = true;
+  loadingSpinner.style.display = 'none';
   player.setVolume(currentVol);
   player.playVideo();
+  updatePlayPauseButton();
+  
+  // Apply default aspect ratio
+  applyAspectRatio(aspectRatio);
+  
+  // Set up controls auto-hide
+  resetControlsTimeout();
 }
 
-/* --- Utility --- */
-function fmt(sec){sec=Math.max(0,Math.floor(sec||0));
-  const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;
-  return (h>0?h.toString().padStart(2,"0")+":":"")+m.toString().padStart(2,"0")+":"+s.toString().padStart(2,"0");
+function onPlayerStateChange(event) {
+  updatePlayPauseButton();
+  
+  // Show loading when buffering
+  if (event.data === YT.PlayerState.BUFFERING) {
+    loadingSpinner.style.display = 'block';
+  } else {
+    loadingSpinner.style.display = 'none';
+  }
 }
-function showSeekHud(cur,dur,delta){
-  seekHud.innerHTML=`${fmt(cur)} / ${fmt(dur)}<br>[ ${delta>0?"+":""}${fmt(Math.abs(delta))} ]`;
+
+function onPlayerError(event) {
+  loadingSpinner.style.display = 'none';
+  console.error('YouTube Player Error:', event);
+}
+
+/* --- Utility Functions --- */
+function fmt(sec) {
+  sec = Math.max(0, Math.floor(sec || 0));
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+  return (h > 0 ? h.toString().padStart(2, "0") + ":" : "") + m.toString().padStart(2, "0") + ":" + s.toString().padStart(2, "0");
+}
+
+function showSeekHud(cur, dur, delta) {
+  seekHud.innerHTML = `${fmt(cur)} / ${fmt(dur)}<br>[ ${delta > 0 ? "+" : ""}${fmt(Math.abs(delta))} ]`;
   seekHud.classList.add("visible");
-  clearTimeout(seekHud._t);seekHud._t=setTimeout(()=>seekHud.classList.remove("visible"),900);
+  clearTimeout(seekHud._t);
+  seekHud._t = setTimeout(() => seekHud.classList.remove("visible"), 900);
 }
-function showVolHud(v){
-  vFill.style.height=v+"%";vHud.classList.add("visible");
-  clearTimeout(vHud._t);vHud._t=setTimeout(()=>vHud.classList.remove("visible"),900);
+
+function showVolHud(v) {
+  vFill.style.height = v + "%";
+  vHud.classList.add("visible");
+  clearTimeout(vHud._t);
+  vHud._t = setTimeout(() => vHud.classList.remove("visible"), 900);
 }
-function showBrightHud(p){
-  bFill.style.height=p+"%";bHud.classList.add("visible");
-  clearTimeout(bHud._t);bHud._t=setTimeout(()=>bHud.classList.remove("visible"),900);
+
+function showBrightHud(p) {
+  bFill.style.height = p + "%";
+  bHud.classList.add("visible");
+  clearTimeout(bHud._t);
+  bHud._t = setTimeout(() => bHud.classList.remove("visible"), 900);
 }
+
+function toggleControls() {
+  controlsVisible = !controlsVisible;
+  
+  if (controlsVisible) {
+    customControls.classList.add("visible");
+    navControls.classList.add("visible");
+    resetControlsTimeout();
+  } else {
+    customControls.classList.remove("visible");
+    navControls.classList.remove("visible");
+    aspectMenu.classList.remove("visible");
+  }
+}
+
+function showControlsTemporarily() {
+  if (!controlsVisible) {
+    toggleControls();
+  }
+  resetControlsTimeout();
+}
+
+function resetControlsTimeout() {
+  clearTimeout(controlsTimeout);
+  if (controlsVisible) {
+    controlsTimeout = setTimeout(() => {
+      if (controlsVisible) {
+        toggleControls();
+      }
+    }, 3000);
+  }
+}
+
+function updatePlayPauseButton() {
+  if (!ready) return;
+  
+  const state = player.getPlayerState();
+  if (state === YT.PlayerState.PLAYING) {
+    playPauseBtn.textContent = "⏸️";
+  } else {
+    playPauseBtn.textContent = "▶️";
+  }
+}
+
+function togglePlayPause() {
+  if (!ready) return;
+  
+  const state = player.getPlayerState();
+  if (state === YT.PlayerState.PLAYING) {
+    player.pauseVideo();
+  } else {
+    player.playVideo();
+  }
+  updatePlayPauseButton();
+}
+
+function showMiddleIndicator(isPlaying) {
+  middleIndicator.textContent = isPlaying ? "⏸️" : "▶️";
+  middleIndicator.classList.add("visible");
+  
+  setTimeout(() => {
+    middleIndicator.classList.remove("visible");
+  }, 500);
+}
+
+function applyAspectRatio(ratio) {
+  const playerElement = document.getElementById('yt-player');
+  aspectRatio = ratio;
+  
+  // Reset any previous styles
+  playerElement.style.width = '100%';
+  playerElement.style.height = '100%';
+  playerElement.style.objectFit = 'contain';
+  playerElement.style.position = 'absolute';
+  playerElement.style.top = '0';
+  playerElement.style.left = '0';
+  playerWrap.classList.remove('immersive-mode');
+  
+  switch(ratio) {
+    case 'fit':
+      // Default behavior - fit to container with padding
+      playerElement.style.objectFit = 'contain';
+      break;
+    case 'fill':
+      // Fill screen without black bars - immersive experience
+      playerElement.style.objectFit = 'cover';
+      playerWrap.classList.add('immersive-mode');
+      break;
+    case 'original':
+      // Original video dimensions
+      if (player && player.getVideoData) {
+        const videoData = player.getVideoData();
+        const width = parseInt(videoData.width);
+        const height = parseInt(videoData.height);
+        
+        if (width && height) {
+          const containerWidth = playerWrap.offsetWidth;
+          const containerHeight = playerWrap.offsetHeight;
+          const videoAspect = width / height;
+          const containerAspect = containerWidth / containerHeight;
+          
+          if (containerAspect > videoAspect) {
+            // Container is wider than video
+            playerElement.style.height = '100%';
+            playerElement.style.width = (containerHeight * videoAspect) + 'px';
+            playerElement.style.left = '50%';
+            playerElement.style.transform = 'translateX(-50%)';
+          } else {
+            // Container is taller than video
+            playerElement.style.width = '100%';
+            playerElement.style.height = (containerWidth / videoAspect) + 'px';
+            playerElement.style.top = '50%';
+            playerElement.style.transform = 'translateY(-50%)';
+          }
+        }
+      }
+      break;
+    case '16:9':
+      // Standard 16:9 aspect ratio
+      const containerWidth = playerWrap.offsetWidth;
+      playerElement.style.width = '100%';
+      playerElement.style.height = (containerWidth * 9/16) + 'px';
+      playerElement.style.top = '50%';
+      playerElement.style.transform = 'translateY(-50%)';
+      break;
+    case '4:3':
+      // Standard 4:3 aspect ratio
+      const containerWidth2 = playerWrap.offsetWidth;
+      playerElement.style.width = '100%';
+      playerElement.style.height = (containerWidth2 * 3/4) + 'px';
+      playerElement.style.top = '50%';
+      playerElement.style.transform = 'translateY(-50%)';
+      break;
+  }
+}
+
+/* --- Event Listeners --- */
+
+// Single tap to show/hide controls or trigger native controls
+playerWrap.addEventListener('click', function(e) {
+  // If clicking on control buttons, don't toggle controls
+  if (e.target.closest('#customControls') || e.target.closest('#navControls')) {
+    return;
+  }
+  
+  // If clicking in the center area, handle play/pause
+  if (e.target === centerTapArea || isInCenterArea(e.clientX, e.clientY)) {
+    const now = Date.now();
+    if (now - lastTap > 300) { // Not a double tap
+      togglePlayPause();
+      showMiddleIndicator(player.getPlayerState() !== YT.PlayerState.PLAYING);
+      showControlsTemporarily();
+      lastTap = now;
+    }
+    return;
+  }
+  
+  // For other areas, toggle custom controls
+  const now = Date.now();
+  if (now - lastTap > 300) { // Not a double tap
+    toggleControls();
+    lastTap = now;
+  }
+});
+
+// Double tap in center area for quick play/pause
+centerTapArea.addEventListener('dblclick', function(e) {
+  if (!ready) return;
+  
+  const isPlaying = player.getPlayerState() === YT.PlayerState.PLAYING;
+  togglePlayPause();
+  showMiddleIndicator(!isPlaying);
+  showControlsTemporarily();
+});
+
+// Check if coordinates are in center area
+function isInCenterArea(x, y) {
+  const rect = centerTapArea.getBoundingClientRect();
+  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+}
+
+// Play/Pause button click
+playPauseBtn.addEventListener('click', function(e) {
+  e.stopPropagation();
+  togglePlayPause();
+  showControlsTemporarily();
+});
+
+// Aspect ratio button click
+aspectRatioBtn.addEventListener('click', function(e) {
+  e.stopPropagation();
+  aspectMenu.classList.toggle('visible');
+  showControlsTemporarily();
+});
+
+// Aspect ratio menu options
+document.querySelectorAll('.aspect-option').forEach(option => {
+  option.addEventListener('click', function(e) {
+    e.stopPropagation();
+    const ratio = this.getAttribute('data-ratio');
+    applyAspectRatio(ratio);
+    aspectMenu.classList.remove('visible');
+    showControlsTemporarily();
+  });
+});
+
+// Hide aspect menu when clicking elsewhere
+document.addEventListener('click', function() {
+  aspectMenu.classList.remove('visible');
+});
+
+// Back button
+backBtn.addEventListener('click', function(e) {
+  e.stopPropagation();
+  // In a real app, this would navigate back
+  if (window.history.length > 1) {
+    window.history.back();
+  } else {
+    window.close();
+  }
+});
+
+// Settings button
+settingsBtn.addEventListener('click', function(e) {
+  e.stopPropagation();
+  // In a real app, this would open settings
+  alert('Settings button pressed');
+});
+
+// Reset timeout on user interaction
+playerWrap.addEventListener('mousemove', resetControlsTimeout);
+playerWrap.addEventListener('touchstart', resetControlsTimeout);
 
 /* --- Gestures --- */
-let velocity=0,lastMove=0,lastX=0;
-gestureZone.addEventListener("touchstart",e=>{
-  if(!ready||e.touches.length!==1)return;
-  startX=e.touches[0].clientX;startY=e.touches[0].clientY;gesture=null;
-  lastMove=Date.now();lastX=startX;
+let velocity = 0, lastMove = 0, lastX = 0;
+gestureZone.addEventListener("touchstart", e => {
+  if (!ready || e.touches.length !== 1) return;
+  startX = e.touches[0].clientX;
+  startY = e.touches[0].clientY;
+  gesture = null;
+  lastMove = Date.now();
+  lastX = startX;
+  
+  // Show controls when user interacts
+  showControlsTemporarily();
+  
   // long press for 2x
-  longPressTimer=setTimeout(()=>{
+  longPressTimer = setTimeout(() => {
     player.setPlaybackRate(2);
-    showSeekHud(player.getCurrentTime(),player.getDuration(),0);
-    seekHud.innerHTML="2× Speed";
-  },500);
+    showSeekHud(player.getCurrentTime(), player.getDuration(), 0);
+    seekHud.innerHTML = "2× Speed";
+  }, 500);
 });
-gestureZone.addEventListener("touchmove",e=>{
-  const t=e.touches[0];const dx=t.clientX-startX,dy=t.clientY-startY;
+
+gestureZone.addEventListener("touchmove", e => {
+  const t = e.touches[0];
+  const dx = t.clientX - startX, dy = t.clientY - startY;
   clearTimeout(longPressTimer);
-  const adx=Math.abs(dx),ady=Math.abs(dy);
-  if(!gesture){
-    if(adx>ady&&adx>10)gesture="seek";
-    else if(ady>adx&&ady>10)gesture=(startX>window.innerWidth/2)?"volume":"brightness";
+  const adx = Math.abs(dx), ady = Math.abs(dy);
+  
+  if (!gesture) {
+    if (adx > ady && adx > 10) gesture = "seek";
+    else if (ady > adx && ady > 10) gesture = (startX > window.innerWidth / 2) ? "volume" : "brightness";
   }
-  if(gesture==="seek"){
-    const dur=player.getDuration()||0,cur=player.getCurrentTime()||0;
-    const now=Date.now();const dt=now-lastMove;
-    velocity=(dx-lastX)/dt;lastMove=now;lastX=dx;
-    const baseDelta=dx/window.innerWidth*SEEK_MAX;
-    const delta=baseDelta*(1+Math.abs(velocity*SEEK_VELOCITY_SCALE));
-    const preview=Math.max(0,Math.min(dur,cur+delta));
-    showSeekHud(preview,dur,delta);
-  }else if(gesture==="volume"){
-    let v=player.getVolume()+(-dy/window.innerHeight*VOLUME_STEP);
-    v=Math.max(0,Math.min(100,v));
-    player.setVolume(v);currentVol=v;showVolHud(v);
-  }else if(gesture==="brightness"){
-    brightness+=(-dy/window.innerHeight*BRIGHTNESS_STEP);
-    brightness=Math.max(0.5,Math.min(1.6,brightness));
-    document.getElementById("yt-player").style.filter=`brightness(${brightness})`;
-    const percent=Math.round((brightness-0.5)/1.1*100);
+  
+  if (gesture === "seek") {
+    const dur = player.getDuration() || 0, cur = player.getCurrentTime() || 0;
+    const now = Date.now();
+    const dt = now - lastMove;
+    velocity = (dx - lastX) / dt;
+    lastMove = now;
+    lastX = dx;
+    const baseDelta = dx / window.innerWidth * SEEK_MAX;
+    const delta = baseDelta * (1 + Math.abs(velocity * SEEK_VELOCITY_SCALE));
+    const preview = Math.max(0, Math.min(dur, cur + delta));
+    showSeekHud(preview, dur, delta);
+  } else if (gesture === "volume") {
+    let v = player.getVolume() + (-dy / window.innerHeight * VOLUME_STEP);
+    v = Math.max(0, Math.min(100, v));
+    player.setVolume(v);
+    currentVol = v;
+    showVolHud(v);
+  } else if (gesture === "brightness") {
+    brightness += (-dy / window.innerHeight * BRIGHTNESS_STEP);
+    brightness = Math.max(0.5, Math.min(1.6, brightness));
+    document.getElementById("yt-player").style.filter = `brightness(${brightness})`;
+    const percent = Math.round((brightness - 0.5) / 1.1 * 100);
     showBrightHud(percent);
   }
   e.preventDefault();
-},{passive:false});
-gestureZone.addEventListener("touchend",e=>{
+}, {passive: false});
+
+gestureZone.addEventListener("touchend", e => {
   clearTimeout(longPressTimer);
-  if(!ready)return;
-  const now=Date.now();
-  const dx=e.changedTouches[0].clientX-startX;
-  if(gesture==="seek"){
-    const dur=player.getDuration()||0,cur=player.getCurrentTime()||0;
-    const delta=dx/window.innerWidth*SEEK_MAX*(1+Math.abs(velocity*SEEK_VELOCITY_SCALE));
-    const dest=Math.max(0,Math.min(dur,cur+delta));
-    player.seekTo(dest,true);
-    showSeekHud(dest,dur,delta);
-  }else{
+  if (!ready) return;
+  const now = Date.now();
+  const dx = e.changedTouches[0].clientX - startX;
+  
+  if (gesture === "seek") {
+    const dur = player.getDuration() || 0, cur = player.getCurrentTime() || 0;
+    const delta = dx / window.innerWidth * SEEK_MAX * (1 + Math.abs(velocity * SEEK_VELOCITY_SCALE));
+    const dest = Math.max(0, Math.min(dur, cur + delta));
+    player.seekTo(dest, true);
+    showSeekHud(dest, dur, delta);
+  } else {
     // double tap skip
-    if(now-lastTap<300){
-      const half=window.innerWidth/2;
-      if(startX<half){
-        player.seekTo(Math.max(0,player.getCurrentTime()-10),true);
-        showSeekHud(player.getCurrentTime()-10,player.getDuration(),-10);
-      }else{
-        player.seekTo(player.getCurrentTime()+10,true);
-        showSeekHud(player.getCurrentTime()+10,player.getDuration(),+10);
+    if (now - lastTap < 300) {
+      const half = window.innerWidth / 2;
+      if (startX < half) {
+        player.seekTo(Math.max(0, player.getCurrentTime() - 10), true);
+        showSeekHud(player.getCurrentTime() - 10, player.getDuration(), -10);
+      } else {
+        player.seekTo(player.getCurrentTime() + 10, true);
+        showSeekHud(player.getCurrentTime() + 10, player.getDuration(), +10);
       }
-      lastTap=0;
-    }else{
-      // single tap — trigger native controls visibility
-      try {
-        const evt = new MouseEvent('click', {bubbles:true,cancelable:true});
-        document.elementFromPoint(e.changedTouches[0].clientX, e.changedTouches[0].clientY)?.dispatchEvent(evt);
-      } catch(ex){}
-      lastTap=now;
+      lastTap = 0;
+    } else {
+      // single tap - handled by the click event
+      lastTap = now;
     }
   }
+  
   // reset playback speed
-  if(player.getPlaybackRate()>1)setTimeout(()=>player.setPlaybackRate(1),500);
-  gesture=null;
+  if (player.getPlaybackRate() > 1) setTimeout(() => player.setPlaybackRate(1), 500);
+  gesture = null;
+});
+
+// Handle orientation changes
+window.addEventListener('orientationchange', function() {
+  // Reapply aspect ratio after orientation change
+  setTimeout(() => {
+    applyAspectRatio(aspectRatio);
+  }, 300);
+});
+
+// Handle window resize
+window.addEventListener('resize', function() {
+  applyAspectRatio(aspectRatio);
 });
 </script>
 </body>
