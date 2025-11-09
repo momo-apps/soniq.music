@@ -14,7 +14,7 @@
         body {
             background: #000;
             color: #fff;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             height: 100vh;
             overflow: hidden;
             touch-action: manipulation;
@@ -25,15 +25,6 @@
             width: 100%;
             height: 100%;
             background: #000;
-            display: flex;
-            flex-direction: column;
-        }
-        
-        #video-wrapper {
-            flex: 1;
-            position: relative;
-            overflow: hidden;
-            background: #000;
         }
         
         #yt-player {
@@ -42,7 +33,7 @@
             background: #000;
         }
         
-        /* Gesture Overlay */
+        /* Gesture Overlay - Only for custom gestures */
         #gesture-overlay {
             position: absolute;
             top: 0;
@@ -56,12 +47,24 @@
         .gesture-panel {
             flex: 1;
             height: 100%;
+            /* Let YouTube controls handle their own areas */
+        }
+        
+        /* Center area for double-tap play/pause */
+        #center-area {
+            position: absolute;
+            top: 25%;
+            left: 25%;
+            right: 25%;
+            bottom: 25%;
+            z-index: 5;
+            /* background: rgba(255,0,0,0.1); */ /* Debug */
         }
         
         /* HUD Elements */
         .hud {
             position: absolute;
-            background: rgba(0, 0, 0, 0.7);
+            background: rgba(0, 0, 0, 0.8);
             padding: 12px 16px;
             border-radius: 8px;
             font-size: 16px;
@@ -137,6 +140,7 @@
             opacity: 0;
             transition: opacity 0.3s;
             pointer-events: none;
+            backdrop-filter: blur(5px);
         }
         
         #center-indicator.visible {
@@ -166,46 +170,48 @@
 </head>
 <body>
     <div id="player-container">
-        <div id="video-wrapper">
-            <div id="yt-player"></div>
-            <div id="loading"></div>
-            
-            <!-- Gesture Overlay -->
-            <div id="gesture-overlay">
-                <div class="gesture-panel" id="left-panel"></div>
-                <div class="gesture-panel" id="center-panel"></div>
-                <div class="gesture-panel" id="right-panel"></div>
-            </div>
-            
-            <!-- HUD Elements -->
-            <div id="seek-hud" class="hud">
-                <span id="seek-time">+0:00</span>
-            </div>
-            
-            <div id="volume-hud" class="hud">
-                <span class="hud-icon">🔊</span>
-                <span id="volume-level">50%</span>
-            </div>
-            
-            <div id="brightness-hud" class="hud">
-                <span class="hud-icon">🌞</span>
-                <span id="brightness-level">100%</span>
-            </div>
-            
-            <div id="speed-hud">2× Speed</div>
-            
-            <div id="center-indicator">⏸️</div>
+        <div id="yt-player"></div>
+        <div id="loading"></div>
+        
+        <!-- Center area for double-tap play/pause -->
+        <div id="center-area"></div>
+        
+        <!-- Gesture Overlay - Only for custom gestures -->
+        <div id="gesture-overlay">
+            <div class="gesture-panel" id="left-panel"></div>
+            <div class="gesture-panel" id="center-panel"></div>
+            <div class="gesture-panel" id="right-panel"></div>
         </div>
+        
+        <!-- HUD Elements -->
+        <div id="seek-hud" class="hud">
+            <span id="seek-time">00:00:00 / 00:00:00 [+00:00]</span>
+        </div>
+        
+        <div id="volume-hud" class="hud">
+            <span class="hud-icon">🔊</span>
+            <span id="volume-level">50%</span>
+        </div>
+        
+        <div id="brightness-hud" class="hud">
+            <span class="hud-icon">🌞</span>
+            <span id="brightness-level">100%</span>
+        </div>
+        
+        <div id="speed-hud">2× Speed</div>
+        
+        <div id="center-indicator">⏸️</div>
     </div>
 
     <script>
-        // Configuration
+        // Configuration - Adjust these values to change sensitivity
         const CONFIG = {
-            SEEK_SENSITIVITY: 0.5,      // Lower = more sensitive
-            VOLUME_SENSITIVITY: 2,      // Higher = less sensitive
-            BRIGHTNESS_SENSITIVITY: 2,  // Higher = less sensitive
-            LONG_PRESS_DURATION: 500,   // ms for long press
-            HUD_DISPLAY_TIME: 1000      // ms to show HUDs
+            SEEK_SENSITIVITY: 0.3,        // Lower = less sensitive seeking
+            VOLUME_SENSITIVITY: 1.5,      // Higher = less sensitive volume
+            BRIGHTNESS_SENSITIVITY: 1.5,  // Higher = less sensitive brightness
+            LONG_PRESS_DURATION: 500,     // ms for long press
+            HUD_DISPLAY_TIME: 1500,       // ms to show HUDs
+            DOUBLE_TAP_DELAY: 300         // ms for double tap detection
         };
 
         // Get video ID from URL parameters
@@ -222,10 +228,10 @@
         let isAdjustingBrightness = false;
         let longPressTimer = null;
         let isLongPressing = false;
+        let lastTapTime = 0;
 
         // DOM Elements
         const playerContainer = document.getElementById('player-container');
-        const videoWrapper = document.getElementById('video-wrapper');
         const loadingSpinner = document.getElementById('loading');
         const seekHud = document.getElementById('seek-hud');
         const volumeHud = document.getElementById('volume-hud');
@@ -235,6 +241,7 @@
         const leftPanel = document.getElementById('left-panel');
         const centerPanel = document.getElementById('center-panel');
         const rightPanel = document.getElementById('right-panel');
+        const centerArea = document.getElementById('center-area');
         const seekTimeElement = document.getElementById('seek-time');
         const volumeLevelElement = document.getElementById('volume-level');
         const brightnessLevelElement = document.getElementById('brightness-level');
@@ -309,38 +316,45 @@
             loadingSpinner.style.display = 'none';
         }
 
-        // Set video size to 16:9
+        // Set video size to 16:9 - Only affects video, not controls
         function setVideoSize(aspectRatio) {
             if (!playerReady) return;
             
-            const containerWidth = videoWrapper.clientWidth;
-            const containerHeight = videoWrapper.clientHeight;
+            // For 16:9, we let YouTube handle the video aspect ratio
+            // while keeping the controls visible
+            const iframe = document.getElementById('yt-player');
+            iframe.style.objectFit = 'contain';
             
+            // If you want to force 16:9 without cropping, use 'contain'
+            // If you want to fill the screen with possible cropping, use 'cover'
             if (aspectRatio === '16:9') {
-                const videoHeight = containerWidth * 9 / 16;
-                
-                if (videoHeight <= containerHeight) {
-                    // Width is the limiting factor
-                    player.setSize(containerWidth, videoHeight);
-                } else {
-                    // Height is the limiting factor
-                    const videoWidth = containerHeight * 16 / 9;
-                    player.setSize(videoWidth, containerHeight);
-                }
-                
-                // Center the video
-                const iframe = document.getElementById('yt-player');
-                iframe.style.margin = '0 auto';
-                iframe.style.display = 'block';
+                // YouTube player will automatically maintain 16:9 aspect ratio
+                // with controls visible below the video
             }
         }
 
-        // Format time in MM:SS
-        function formatTime(seconds) {
-            const mins = Math.floor(Math.abs(seconds) / 60);
-            const secs = Math.floor(Math.abs(seconds) % 60);
-            const sign = seconds < 0 ? '-' : '+';
-            return `${sign}${mins}:${secs.toString().padStart(2, '0')}`;
+        // Format time in HH:MM:SS
+        function formatTime(totalSeconds) {
+            totalSeconds = Math.max(0, Math.floor(totalSeconds || 0));
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const seconds = totalSeconds % 60;
+            
+            if (hours > 0) {
+                return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            } else {
+                return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            }
+        }
+
+        // Format seek display: current/total[+/-seek_time]
+        function formatSeekDisplay(current, total, delta) {
+            const currentFormatted = formatTime(current);
+            const totalFormatted = formatTime(total);
+            const deltaFormatted = formatTime(Math.abs(delta));
+            const sign = delta >= 0 ? '+' : '-';
+            
+            return `${currentFormatted} / ${totalFormatted} [${sign}${deltaFormatted}]`;
         }
 
         // Show HUD with timeout
@@ -361,7 +375,7 @@
             const newTime = Math.max(0, Math.min(duration, currentTime + delta));
             
             // Update HUD
-            seekTimeElement.textContent = formatTime(delta);
+            seekTimeElement.textContent = formatSeekDisplay(newTime, duration, delta);
             showHud(seekHud);
             
             // Seek to new time
@@ -385,7 +399,7 @@
             currentBrightness = Math.max(0.1, Math.min(1, currentBrightness + delta));
             
             // Apply brightness filter to video wrapper
-            videoWrapper.style.filter = `brightness(${currentBrightness})`;
+            document.body.style.filter = `brightness(${currentBrightness})`;
             
             // Update HUD
             brightnessLevelElement.textContent = `${Math.round(currentBrightness * 100)}%`;
@@ -423,12 +437,19 @@
         // Initialize gesture controls
         function initGestureControls() {
             let startX, startY;
-            let startTime, currentTime;
+            let startTime;
             let isHorizontalGesture = false;
             let isVerticalGesture = false;
             
-            // Touch start event
+            // Touch start event - Only on gesture overlay, not on YouTube controls
             function handleTouchStart(e) {
+                // Don't interfere with YouTube controls
+                if (e.target.closest('.ytp-chrome-top') || 
+                    e.target.closest('.ytp-chrome-bottom') ||
+                    e.target.closest('.ytp-progress-bar')) {
+                    return;
+                }
+                
                 if (!playerReady) return;
                 
                 const touch = e.touches[0];
@@ -450,18 +471,23 @@
                     player.setPlaybackRate(2);
                     showHud(speedHud, 1000);
                 }, CONFIG.LONG_PRESS_DURATION);
-                
-                e.preventDefault();
             }
             
             // Touch move event
             function handleTouchMove(e) {
+                // Don't interfere with YouTube controls
+                if (e.target.closest('.ytp-chrome-top') || 
+                    e.target.closest('.ytp-chrome-bottom') ||
+                    e.target.closest('.ytp-progress-bar')) {
+                    return;
+                }
+                
                 if (!playerReady || !startX || !startY) return;
                 
                 const touch = e.touches[0];
                 const deltaX = touch.clientX - startX;
                 const deltaY = touch.clientY - startY;
-                currentTime = Date.now();
+                const currentTime = Date.now();
                 
                 // Cancel long press if moved too much
                 if (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10) {
@@ -473,6 +499,7 @@
                     if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 10) {
                         isHorizontalGesture = true;
                         isSeeking = true;
+                        e.preventDefault(); // Prevent scrolling when seeking
                     } else if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 10) {
                         isVerticalGesture = true;
                         
@@ -482,6 +509,7 @@
                         } else {
                             isAdjustingVolume = true;
                         }
+                        e.preventDefault(); // Prevent scrolling when adjusting
                     }
                 }
                 
@@ -491,7 +519,7 @@
                     
                     // Apply velocity factor based on movement speed
                     const elapsed = currentTime - startTime;
-                    const velocity = Math.min(3, 1 + (Math.abs(deltaX) / elapsed) * 0.1);
+                    const velocity = Math.min(3, 1 + (Math.abs(deltaX) / elapsed) * 0.05);
                     const adjustedDelta = timeDelta * velocity;
                     
                     seekVideo(adjustedDelta);
@@ -502,15 +530,13 @@
                     const delta = -deltaY / window.innerHeight; // Invert for natural feel
                     
                     if (isAdjustingVolume) {
-                        const volumeDelta = delta * CONFIG.VOLUME_SENSITIVITY * 100;
+                        const volumeDelta = delta * 100 / CONFIG.VOLUME_SENSITIVITY;
                         adjustVolume(volumeDelta);
                     } else if (isAdjustingBrightness) {
-                        const brightnessDelta = delta * CONFIG.BRIGHTNESS_SENSITIVITY;
+                        const brightnessDelta = delta / CONFIG.BRIGHTNESS_SENSITIVITY;
                         adjustBrightness(brightnessDelta);
                     }
                 }
-                
-                e.preventDefault();
             }
             
             // Touch end event
@@ -535,23 +561,35 @@
             
             // Add event listeners to gesture overlay
             const gestureOverlay = document.getElementById('gesture-overlay');
-            gestureOverlay.addEventListener('touchstart', handleTouchStart, { passive: false });
+            gestureOverlay.addEventListener('touchstart', handleTouchStart, { passive: true });
             gestureOverlay.addEventListener('touchmove', handleTouchMove, { passive: false });
             gestureOverlay.addEventListener('touchend', handleTouchEnd);
             
-            // Double tap for play/pause on center panel
-            let lastTap = 0;
-            centerPanel.addEventListener('touchend', function(e) {
-                const currentTime = new Date().getTime();
-                const tapLength = currentTime - lastTap;
+            // Double tap for play/pause on center area
+            centerArea.addEventListener('touchend', function(e) {
+                // Don't interfere with YouTube controls
+                if (e.target.closest('.ytp-chrome-top') || 
+                    e.target.closest('.ytp-chrome-bottom') ||
+                    e.target.closest('.ytp-progress-bar')) {
+                    return;
+                }
                 
-                if (tapLength < 300 && tapLength > 0) {
+                const currentTime = new Date().getTime();
+                const tapLength = currentTime - lastTapTime;
+                
+                if (tapLength < CONFIG.DOUBLE_TAP_DELAY && tapLength > 0) {
                     // Double tap detected
                     togglePlayPause();
                     e.preventDefault();
                 }
                 
-                lastTap = currentTime;
+                lastTapTime = currentTime;
+            });
+            
+            // Single tap to show YouTube controls
+            gestureOverlay.addEventListener('click', function(e) {
+                // Let YouTube handle the tap to show controls
+                // We don't need to do anything special here
             });
         }
 
@@ -562,12 +600,6 @@
             
             // Handle window resize
             window.addEventListener('resize', handleResize);
-            
-            // Single tap to show controls (delegated to YouTube player)
-            document.getElementById('gesture-overlay').addEventListener('click', function() {
-                // This will trigger YouTube's native controls to show
-                // We don't need to do anything special here
-            });
         }
 
         // Start initialization when DOM is loaded
