@@ -3,18 +3,18 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-<title>Soniq — Android Player (Refined)</title>
+<title>Soniq — Android Player (Enhanced)</title>
 <style>
   html,body{
     margin:0;height:100%;overflow:hidden;background:#000;color:#fff;
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial;
   }
   #playerWrap{position:relative;width:100%;height:100%;background:#000;}
-  #yt-player{width:100%;height:100%;background:#000;position:relative;z-index:1;}
+  #yt-player{width:100%;height:100%;background:#000;position:relative;z-index:1;transition:transform .3s ease,object-fit .3s ease;}
   /* gesture zone: safe middle area */
   #gestureZone{
     position:absolute;left:0;right:0;
-    top:var(--top,15%);bottom:var(--bottom,15%);
+    top:var(--top,20%);bottom:var(--bottom,20%);
     z-index:5;touch-action:none;
   }
   /* HUDs */
@@ -33,40 +33,53 @@
     opacity:0;transition:opacity .2s;z-index:10;
   }
   .hudBox.visible{display:flex;opacity:1;}
-  #vHud{right:20px;}  /* volume HUD shows on right */
-  #bHud{left:20px;}   /* brightness HUD shows on left */
-  .hudBar{
-    width:4px;height:100px;background:rgba(255,255,255,0.2);
-    border-radius:2px;overflow:hidden;display:flex;align-items:flex-end;
+  #vHud{right:20px;} #bHud{left:20px;}
+  .hudBar{width:4px;height:100px;background:rgba(255,255,255,0.2);border-radius:2px;overflow:hidden;display:flex;align-items:flex-end;}
+  .hudBarFill{width:100%;height:50%;background:#fff;border-radius:2px 2px 0 0;transition:height .1s;}
+  /* bottom control bar */
+  #controlsBar{
+    position:absolute;bottom:10px;left:50%;transform:translateX(-50%);
+    display:flex;align-items:center;gap:16px;z-index:20;
+    background:rgba(0,0,0,0.6);padding:10px 20px;border-radius:30px;
+    opacity:0;transition:opacity .3s;
   }
-  .hudBarFill{
-    width:100%;height:50%;background:#fff;border-radius:2px 2px 0 0;
-    transition:height .1s;
+  #controlsBar.visible{opacity:1;}
+  .ctrl-btn{
+    background:none;border:0;color:#fff;font-size:20px;cursor:pointer;
+    padding:8px 12px;transition:opacity .2s;
   }
+  .ctrl-btn:hover{opacity:0.7;}
 </style>
 </head>
 <body>
   <div id="playerWrap">
     <div id="yt-player"></div>
-
-    <!-- gesture zone between title and progress bar -->
     <div id="gestureZone"></div>
 
     <!-- HUD overlays -->
     <div id="seekHud">00:00:00 / 00:00:00<br>[ +0 s ]</div>
     <div id="vHud" class="hudBox"><span>🔊</span><div class="hudBar"><div class="hudBarFill" id="vFill"></div></div></div>
     <div id="bHud" class="hudBox"><span>🌞</span><div class="hudBar"><div class="hudBarFill" id="bFill"></div></div></div>
+
+    <!-- Bottom Controls -->
+    <div id="controlsBar">
+      <button id="btnPlayPause" class="ctrl-btn">⏯</button>
+      <button id="btnAspect" class="ctrl-btn">🖼</button>
+    </div>
   </div>
 
 <script>
-/* ================== CONFIG CONSTANTS ================== */
-const SEEK_MAX = 120;            // base max seek range (seconds)
-const SEEK_VELOCITY_SCALE = 25;  // velocity multiplier sensitivity
-const BRIGHTNESS_STEP = 0.5;     // brightness sensitivity
-const VOLUME_STEP = 100;         // volume sensitivity (%)
-const GESTURE_ZONE_TOP = 20;     // top % boundary
-const GESTURE_ZONE_BOTTOM = 20;  // bottom % boundary
-/* ====================================================== */
+/* ========== CONFIG CONSTANTS ========== */
+const SEEK_MAX = 120;
+const SEEK_VELOCITY_SCALE = 25;
+const BRIGHTNESS_STEP = 0.5;
+const VOLUME_STEP = 100;
+const GESTURE_ZONE_TOP = 20;
+const GESTURE_ZONE_BOTTOM = 20;
+const DOUBLE_TAP_THRESHOLD = 300;
+const CONTROLS_HIDE_DELAY = 3000;
+const ASPECT_MODES = ['fit','fill','zoom'];
+/* ===================================== */
 
 document.documentElement.style.setProperty('--top', GESTURE_ZONE_TOP + '%');
 document.documentElement.style.setProperty('--bottom', GESTURE_ZONE_BOTTOM + '%');
@@ -76,11 +89,15 @@ const videoId = params.get("videoId") || "dQw4w9WgXcQ";
 
 let player, ready=false, brightness=1, currentVol=60;
 let startX=0,startY=0,gesture=null,lastTap=0,longPressTimer=null;
+let velocity=0,lastMove=0,lastX=0,controlsTimer=null,aspectIndex=0;
 
 const seekHud=document.getElementById("seekHud");
 const vHud=document.getElementById("vHud"),bHud=document.getElementById("bHud");
 const vFill=document.getElementById("vFill"),bFill=document.getElementById("bFill");
 const gestureZone=document.getElementById("gestureZone");
+const controlsBar=document.getElementById("controlsBar");
+const btnPlayPause=document.getElementById("btnPlayPause");
+const btnAspect=document.getElementById("btnAspect");
 
 /* --- YouTube API --- */
 (function(){
@@ -95,13 +112,17 @@ function onYouTubeIframeAPIReady(){
       autoplay:1,controls:1,rel:0,modestbranding:1,playsinline:1,
       enablejsapi:1,iv_load_policy:3,fs:0,disablekb:1
     },
-    events:{onReady:onPlayerReady}
+    events:{onReady:onPlayerReady,onStateChange:onStateChange}
   });
 }
 function onPlayerReady(){
   ready=true;
   player.setVolume(currentVol);
   player.playVideo();
+  showControlsTemporarily();
+}
+function onStateChange(){
+  updatePlayButton();
 }
 
 /* --- Utility --- */
@@ -114,22 +135,26 @@ function showSeekHud(cur,dur,delta){
   seekHud.classList.add("visible");
   clearTimeout(seekHud._t);seekHud._t=setTimeout(()=>seekHud.classList.remove("visible"),900);
 }
-function showVolHud(v){
-  vFill.style.height=v+"%";vHud.classList.add("visible");
-  clearTimeout(vHud._t);vHud._t=setTimeout(()=>vHud.classList.remove("visible"),900);
+function showVolHud(v){vFill.style.height=v+"%";vHud.classList.add("visible");
+  clearTimeout(vHud._t);vHud._t=setTimeout(()=>vHud.classList.remove("visible"),900);}
+function showBrightHud(p){bFill.style.height=p+"%";bHud.classList.add("visible");
+  clearTimeout(bHud._t);bHud._t=setTimeout(()=>bHud.classList.remove("visible"),900);}
+function updatePlayButton(){
+  if(!ready)return;
+  const st=player.getPlayerState();
+  btnPlayPause.textContent=(st===1)?'⏸':'▶️';
 }
-function showBrightHud(p){
-  bFill.style.height=p+"%";bHud.classList.add("visible");
-  clearTimeout(bHud._t);bHud._t=setTimeout(()=>bHud.classList.remove("visible"),900);
+function showControlsTemporarily(){
+  controlsBar.classList.add("visible");
+  clearTimeout(controlsTimer);
+  controlsTimer=setTimeout(()=>controlsBar.classList.remove("visible"),CONTROLS_HIDE_DELAY);
 }
 
 /* --- Gestures --- */
-let velocity=0,lastMove=0,lastX=0;
 gestureZone.addEventListener("touchstart",e=>{
   if(!ready||e.touches.length!==1)return;
   startX=e.touches[0].clientX;startY=e.touches[0].clientY;gesture=null;
   lastMove=Date.now();lastX=startX;
-  // long press for 2x
   longPressTimer=setTimeout(()=>{
     player.setPlaybackRate(2);
     showSeekHud(player.getCurrentTime(),player.getDuration(),0);
@@ -170,37 +195,47 @@ gestureZone.addEventListener("touchend",e=>{
   if(!ready)return;
   const now=Date.now();
   const dx=e.changedTouches[0].clientX-startX;
+  const dy=e.changedTouches[0].clientY-startY;
   if(gesture==="seek"){
     const dur=player.getDuration()||0,cur=player.getCurrentTime()||0;
     const delta=dx/window.innerWidth*SEEK_MAX*(1+Math.abs(velocity*SEEK_VELOCITY_SCALE));
     const dest=Math.max(0,Math.min(dur,cur+delta));
     player.seekTo(dest,true);
     showSeekHud(dest,dur,delta);
-  }else{
-    // double tap skip
-    if(now-lastTap<300){
-      const half=window.innerWidth/2;
-      if(startX<half){
-        player.seekTo(Math.max(0,player.getCurrentTime()-10),true);
-        showSeekHud(player.getCurrentTime()-10,player.getDuration(),-10);
-      }else{
-        player.seekTo(player.getCurrentTime()+10,true);
-        showSeekHud(player.getCurrentTime()+10,player.getDuration(),+10);
-      }
+  }else if(Math.abs(dx)<10 && Math.abs(dy)<10){ // tap
+    if(now-lastTap<DOUBLE_TAP_THRESHOLD){
+      // double tap in center → play/pause
+      togglePlayPause();
       lastTap=0;
     }else{
-      // single tap — trigger native controls visibility
-      try {
-        const evt = new MouseEvent('click', {bubbles:true,cancelable:true});
-        document.elementFromPoint(e.changedTouches[0].clientX, e.changedTouches[0].clientY)?.dispatchEvent(evt);
-      } catch(ex){}
+      // single tap → show/hide controls
+      if(controlsBar.classList.contains("visible"))
+        controlsBar.classList.remove("visible");
+      else showControlsTemporarily();
       lastTap=now;
     }
   }
-  // reset playback speed
   if(player.getPlaybackRate()>1)setTimeout(()=>player.setPlaybackRate(1),500);
   gesture=null;
 });
+
+/* --- Control buttons --- */
+btnPlayPause.onclick=togglePlayPause;
+function togglePlayPause(){
+  const st=player.getPlayerState();
+  if(st===1) player.pauseVideo(); else player.playVideo();
+  updatePlayButton(); showControlsTemporarily();
+}
+btnAspect.onclick=()=>{
+  aspectIndex=(aspectIndex+1)%ASPECT_MODES.length;
+  const mode=ASPECT_MODES[aspectIndex];
+  const p=document.getElementById("yt-player");
+  if(mode==='fit'){p.style.objectFit='contain';p.style.transform='scale(1)';}
+  if(mode==='fill'){p.style.objectFit='cover';p.style.transform='scale(1)';}
+  if(mode==='zoom'){p.style.objectFit='cover';p.style.transform='scale(1.2)';}
+  btnAspect.textContent=(mode==='fit')?'🖼':(mode==='fill')?'🔲':'🔍';
+  showControlsTemporarily();
+};
 </script>
 </body>
 </html>
