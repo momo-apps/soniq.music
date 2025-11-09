@@ -122,7 +122,7 @@ function onYouTubeIframeAPIReady(){
   player=new YT.Player("yt-player",{
     videoId:videoId,
     playerVars:{
-      autoplay:1,controls:0,rel:0,modestbranding:1,playsinline:1,
+      autoplay:1,controls:1,rel:0,modestbranding:1,playsinline:1,
       enablejsapi:1,iv_load_policy:3,fs:0,disablekb:1
     },
     events:{onReady:onPlayerReady, onStateChange:onStateChange}
@@ -183,7 +183,7 @@ aspectBtn.addEventListener('click', () => {
       pw = w;
       ph = w / ratio;
     }
-    player.setSize(pw, ph);
+    player.setSize(pw, pw*0.5);
     playerEl.style.position = 'absolute';
     playerEl.style.left = '50%';
     playerEl.style.top = '50%';
