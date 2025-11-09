@@ -1,553 +1,206 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Immersive YouTube Player</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            background: #000;
-            color: #fff;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            height: 100vh;
-            overflow: hidden;
-            touch-action: manipulation;
-        }
-        
-        #player-container {
-            position: relative;
-            width: 100%;
-            height: 100%;
-            background: #000;
-        }
-        
-        #yt-player {
-            width: 100%;
-            height: 100%;
-            background: #000;
-        }
-        
-        /* Gesture Overlay - Only intercepts gestures, not taps */
-        #gesture-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            z-index: 10;
-            /* Let single taps pass through to YouTube */
-            pointer-events: none;
-        }
-        
-        /* Gesture panels - Only active during gestures */
-        .gesture-panel {
-            position: absolute;
-            top: 0;
-            bottom: 0;
-            pointer-events: auto;
-        }
-        
-        #left-panel {
-            left: 0;
-            width: 30%;
-            /* Only for brightness gestures */
-        }
-        
-        #center-panel {
-            left: 30%;
-            width: 40%;
-            /* Only for double-tap play/pause */
-        }
-        
-        #right-panel {
-            left: 70%;
-            width: 30%;
-            /* Only for volume gestures */
-        }
-        
-        /* HUD Elements */
-        .hud {
-            position: absolute;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 12px 16px;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            z-index: 20;
-            display: none;
-            align-items: center;
-            gap: 10px;
-            backdrop-filter: blur(10px);
-        }
-        
-        #seek-hud {
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            text-align: center;
-        }
-        
-        #volume-hud {
-            top: 50%;
-            right: 20px;
-            transform: translateY(-50%);
-        }
-        
-        #brightness-hud {
-            top: 50%;
-            left: 20px;
-            transform: translateY(-50%);
-        }
-        
-        .hud.visible {
-            display: flex;
-        }
-        
-        .hud-icon {
-            font-size: 20px;
-        }
-        
-        /* Playback Speed HUD */
-        #speed-hud {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.8);
-            padding: 15px 20px;
-            border-radius: 10px;
-            font-size: 18px;
-            font-weight: bold;
-            z-index: 25;
-            display: none;
-        }
-        
-        #speed-hud.visible {
-            display: block;
-        }
-        
-        /* Center Tap Indicator */
-        #center-indicator {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 80px;
-            height: 80px;
-            background: rgba(0, 0, 0, 0.7);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 32px;
-            z-index: 15;
-            opacity: 0;
-            transition: opacity 0.3s;
-            pointer-events: none;
-            backdrop-filter: blur(5px);
-        }
-        
-        #center-indicator.visible {
-            opacity: 1;
-        }
-        
-        /* Loading Spinner */
-        #loading {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 50px;
-            height: 50px;
-            border: 4px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            border-top-color: #fff;
-            animation: spin 1s ease-in-out infinite;
-            z-index: 5;
-            display: none;
-        }
-        
-        @keyframes spin {
-            to { transform: translate(-50%, -50%) rotate(360deg); }
-        }
-    </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0" />
+<title>Soniq — Android Player (Refined)</title>
+<style>
+  html,body{
+    margin:0;height:100%;overflow:hidden;background:#000;color:#fff;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial;
+  }
+  #playerWrap{position:relative;width:100%;height:100%;background:#000;}
+  #yt-player{width:100%;height:100%;background:#000;position:relative;z-index:1;}
+  /* gesture zone: safe middle area */
+  #gestureZone{
+    position:absolute;left:0;right:0;
+    top:var(--top,15%);bottom:var(--bottom,15%);
+    z-index:5;touch-action:none;
+  }
+  /* HUDs */
+  #seekHud{
+    position:absolute;left:50%;top:50%;
+    transform:translate(-50%,-50%) scale(1);
+    background:rgba(0,0,0,0.75);padding:12px 18px;border-radius:12px;
+    font-weight:600;font-size:16px;text-align:center;display:none;opacity:0;
+    transition:opacity .2s,transform .2s;z-index:10;
+  }
+  #seekHud.visible{display:block;opacity:1;transform:translate(-50%,-50%) scale(1.05);}
+  .hudBox{
+    position:absolute;top:50%;transform:translateY(-50%);
+    background:rgba(0,0,0,0.75);padding:10px 14px;border-radius:10px;
+    color:#fff;font-size:14px;display:none;align-items:center;gap:8px;
+    opacity:0;transition:opacity .2s;z-index:10;
+  }
+  .hudBox.visible{display:flex;opacity:1;}
+  #vHud{right:20px;}  /* volume HUD shows on right */
+  #bHud{left:20px;}   /* brightness HUD shows on left */
+  .hudBar{
+    width:4px;height:100px;background:rgba(255,255,255,0.2);
+    border-radius:2px;overflow:hidden;display:flex;align-items:flex-end;
+  }
+  .hudBarFill{
+    width:100%;height:50%;background:#fff;border-radius:2px 2px 0 0;
+    transition:height .1s;
+  }
+</style>
 </head>
 <body>
-    <div id="player-container">
-        <div id="yt-player"></div>
-        <div id="loading"></div>
-        
-        <!-- Gesture Overlay - Only intercepts gestures, not taps -->
-        <div id="gesture-overlay">
-            <div class="gesture-panel" id="left-panel"></div>
-            <div class="gesture-panel" id="center-panel"></div>
-            <div class="gesture-panel" id="right-panel"></div>
-        </div>
-        
-        <!-- HUD Elements -->
-        <div id="seek-hud" class="hud">
-            <span id="seek-time">00:00:00 / 00:00:00 [+00:00]</span>
-        </div>
-        
-        <div id="volume-hud" class="hud">
-            <span class="hud-icon">🔊</span>
-            <span id="volume-level">50%</span>
-        </div>
-        
-        <div id="brightness-hud" class="hud">
-            <span class="hud-icon">🌞</span>
-            <span id="brightness-level">100%</span>
-        </div>
-        
-        <div id="speed-hud">2× Speed</div>
-        
-        <div id="center-indicator">⏸️</div>
-    </div>
+  <div id="playerWrap">
+    <div id="yt-player"></div>
 
-    <script>
-        // Configuration - Adjust these values to change sensitivity
-        const CONFIG = {
-            SEEK_SENSITIVITY: 0.3,        // Lower = less sensitive seeking
-            VOLUME_SENSITIVITY: 1.5,      // Higher = less sensitive volume
-            BRIGHTNESS_SENSITIVITY: 1.5,  // Higher = less sensitive brightness
-            LONG_PRESS_DURATION: 500,     // ms for long press
-            HUD_DISPLAY_TIME: 1500,       // ms to show HUDs
-            DOUBLE_TAP_DELAY: 300,        // ms for double tap detection
-            GESTURE_THRESHOLD: 15         // Minimum movement to start gesture
-        };
+    <!-- gesture zone between title and progress bar -->
+    <div id="gestureZone"></div>
 
-        // Get video ID from URL parameters
-        const urlParams = new URLSearchParams(window.location.search);
-        const videoId = urlParams.get('videoId') || 'dQw4w9WgXcQ'; // Default video
+    <!-- HUD overlays -->
+    <div id="seekHud">00:00:00 / 00:00:00<br>[ +00:00 ]</div>
+    <div id="vHud" class="hudBox"><span>🔊</span><div class="hudBar"><div class="hudBarFill" id="vFill"></div></div></div>
+    <div id="bHud" class="hudBox"><span>🌞</span><div class="hudBar"><div class="hudBarFill" id="bFill"></div></div></div>
+  </div>
 
-        // Player state
-        let player;
-        let playerReady = false;
-        let currentVolume = 50;
-        let currentBrightness = 1;
-        let isGestureActive = false;
-        let longPressTimer = null;
-        let lastTapTime = 0;
+<script>
+/* ================== CONFIG CONSTANTS ================== */
+const SEEK_MAX = 120;            // base max seek range (seconds)
+const SEEK_VELOCITY_SCALE = 10;  // velocity multiplier sensitivity
+const BRIGHTNESS_STEP = 0.05;     // brightness sensitivity
+const VOLUME_STEP = 10;         // volume sensitivity (%)
+const GESTURE_ZONE_TOP = 20;     // top % boundary
+const GESTURE_ZONE_BOTTOM = 20;  // bottom % boundary
+/* ====================================================== */
 
-        // DOM Elements
-        const playerContainer = document.getElementById('player-container');
-        const loadingSpinner = document.getElementById('loading');
-        const seekHud = document.getElementById('seek-hud');
-        const volumeHud = document.getElementById('volume-hud');
-        const brightnessHud = document.getElementById('brightness-hud');
-        const speedHud = document.getElementById('speed-hud');
-        const centerIndicator = document.getElementById('center-indicator');
-        const leftPanel = document.getElementById('left-panel');
-        const centerPanel = document.getElementById('center-panel');
-        const rightPanel = document.getElementById('right-panel');
-        const seekTimeElement = document.getElementById('seek-time');
-        const volumeLevelElement = document.getElementById('volume-level');
-        const brightnessLevelElement = document.getElementById('brightness-level');
+document.documentElement.style.setProperty('--top', GESTURE_ZONE_TOP + '%');
+document.documentElement.style.setProperty('--bottom', GESTURE_ZONE_BOTTOM + '%');
 
-        // Initialize YouTube Player
-        function initYouTubePlayer() {
-            // Load YouTube IFrame API
-            const tag = document.createElement('script');
-            tag.src = "https://www.youtube.com/iframe_api";
-            const firstScriptTag = document.getElementsByTagName('script')[0];
-            firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-        }
+const params = new URLSearchParams(location.search);
+const videoId = params.get("videoId") || "dQw4w9WgXcQ";
 
-        // YouTube API ready callback
-        window.onYouTubeIframeAPIReady = function() {
-            player = new YT.Player('yt-player', {
-                height: '100%',
-                width: '100%',
-                videoId: videoId,
-                playerVars: {
-                    'autoplay': 1,
-                    'controls': 1,  // Show native YouTube controls
-                    'rel': 0,
-                    'modestbranding': 1,
-                    'playsinline': 1,
-                    'enablejsapi': 1,
-                    'fs': 1,        // Allow fullscreen
-                    'iv_load_policy': 3
-                },
-                events: {
-                    'onReady': onPlayerReady,
-                    'onStateChange': onPlayerStateChange,
-                    'onError': onPlayerError
-                }
-            });
-        };
+let player, ready=false, brightness=1, currentVol=60;
+let startX=0,startY=0,gesture=null,lastTap=0,longPressTimer=null;
 
-        // Player ready event
-        function onPlayerReady(event) {
-            playerReady = true;
-            loadingSpinner.style.display = 'none';
-            
-            // Set initial volume
-            player.setVolume(currentVolume);
-            
-            console.log('YouTube Player Ready');
-        }
+const seekHud=document.getElementById("seekHud");
+const vHud=document.getElementById("vHud"),bHud=document.getElementById("bHud");
+const vFill=document.getElementById("vFill"),bFill=document.getElementById("bFill");
+const gestureZone=document.getElementById("gestureZone");
 
-        // Player state change event
-        function onPlayerStateChange(event) {
-            // Update center indicator based on play state
-            if (event.data === YT.PlayerState.PLAYING) {
-                centerIndicator.textContent = '⏸️';
-            } else {
-                centerIndicator.textContent = '▶️';
-            }
-            
-            // Show loading when buffering
-            if (event.data === YT.PlayerState.BUFFERING) {
-                loadingSpinner.style.display = 'block';
-            } else {
-                loadingSpinner.style.display = 'none';
-            }
-        }
+/* --- YouTube API --- */
+(function(){
+  const tag=document.createElement("script");
+  tag.src="https://www.youtube.com/iframe_api";
+  document.head.appendChild(tag);
+})();
+function onYouTubeIframeAPIReady(){
+  player=new YT.Player("yt-player",{
+    videoId:videoId,
+    playerVars:{
+      autoplay:1,controls:1,rel:0,modestbranding:1,playsinline:1,
+      enablejsapi:1,iv_load_policy:3,fs:0,disablekb:1
+    },
+    events:{onReady:onPlayerReady}
+  });
+}
+function onPlayerReady(){
+  ready=true;
+  player.setVolume(currentVol);
+  player.playVideo();
+}
 
-        // Player error event
-        function onPlayerError(event) {
-            console.error('YouTube Player Error:', event);
-            loadingSpinner.style.display = 'none';
-        }
+/* --- Utility --- */
+function fmt(sec){sec=Math.max(0,Math.floor(sec||0));
+  const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;
+  return (h>0?h.toString().padStart(2,"0")+":":"")+m.toString().padStart(2,"0")+":"+s.toString().padStart(2,"0");
+}
+function showSeekHud(cur,dur,delta){
+  seekHud.innerHTML=`${fmt(cur)} / ${fmt(dur)}<br>[ ${delta>0?"+":""}${fmt(Math.abs(delta))} ]`;
+  seekHud.classList.add("visible");
+  clearTimeout(seekHud._t);seekHud._t=setTimeout(()=>seekHud.classList.remove("visible"),900);
+}
+function showVolHud(v){
+  vFill.style.height=v+"%";vHud.classList.add("visible");
+  clearTimeout(vHud._t);vHud._t=setTimeout(()=>vHud.classList.remove("visible"),900);
+}
+function showBrightHud(p){
+  bFill.style.height=p+"%";bHud.classList.add("visible");
+  clearTimeout(bHud._t);bHud._t=setTimeout(()=>bHud.classList.remove("visible"),900);
+}
 
-        // Format time in HH:MM:SS
-        function formatTime(totalSeconds) {
-            totalSeconds = Math.max(0, Math.floor(totalSeconds || 0));
-            const hours = Math.floor(totalSeconds / 3600);
-            const minutes = Math.floor((totalSeconds % 3600) / 60);
-            const seconds = totalSeconds % 60;
-            
-            if (hours > 0) {
-                return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            } else {
-                return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            }
-        }
-
-        // Format seek display: current/total[+/-seek_time]
-        function formatSeekDisplay(current, total, delta) {
-            const currentFormatted = formatTime(current);
-            const totalFormatted = formatTime(total);
-            const deltaFormatted = formatTime(Math.abs(delta));
-            const sign = delta >= 0 ? '+' : '-';
-            
-            return `${currentFormatted} / ${totalFormatted} [${sign}${deltaFormatted}]`;
-        }
-
-        // Show HUD with timeout
-        function showHud(hudElement, timeout = CONFIG.HUD_DISPLAY_TIME) {
-            hudElement.classList.add('visible');
-            clearTimeout(hudElement.timeoutId);
-            hudElement.timeoutId = setTimeout(() => {
-                hudElement.classList.remove('visible');
-            }, timeout);
-        }
-
-        // Seek video
-        function seekVideo(delta) {
-            if (!playerReady) return;
-            
-            const currentTime = player.getCurrentTime();
-            const duration = player.getDuration();
-            const newTime = Math.max(0, Math.min(duration, currentTime + delta));
-            
-            // Update HUD
-            seekTimeElement.textContent = formatSeekDisplay(newTime, duration, delta);
-            showHud(seekHud);
-            
-            // Seek to new time
-            player.seekTo(newTime, true);
-        }
-
-        // Adjust volume
-        function adjustVolume(delta) {
-            if (!playerReady) return;
-            
-            currentVolume = Math.max(0, Math.min(100, currentVolume + delta));
-            player.setVolume(currentVolume);
-            
-            // Update HUD
-            volumeLevelElement.textContent = `${Math.round(currentVolume)}%`;
-            showHud(volumeHud);
-        }
-
-        // Adjust brightness
-        function adjustBrightness(delta) {
-            currentBrightness = Math.max(0.1, Math.min(1, currentBrightness + delta));
-            
-            // Apply brightness filter to video wrapper
-            document.body.style.filter = `brightness(${currentBrightness})`;
-            
-            // Update HUD
-            brightnessLevelElement.textContent = `${Math.round(currentBrightness * 100)}%`;
-            showHud(brightnessHud);
-        }
-
-        // Toggle play/pause
-        function togglePlayPause() {
-            if (!playerReady) return;
-            
-            const playerState = player.getPlayerState();
-            
-            if (playerState === YT.PlayerState.PLAYING) {
-                player.pauseVideo();
-                centerIndicator.textContent = '▶️';
-            } else {
-                player.playVideo();
-                centerIndicator.textContent = '⏸️';
-            }
-            
-            // Show center indicator briefly
-            centerIndicator.classList.add('visible');
-            setTimeout(() => {
-                centerIndicator.classList.remove('visible');
-            }, 500);
-        }
-
-        // Handle window resize
-        function handleResize() {
-            // YouTube player handles its own resizing
-        }
-
-        // Initialize gesture controls
-        function initGestureControls() {
-            let startX, startY;
-            let gestureType = null; // 'seek', 'volume', 'brightness'
-            
-            // Touch start event
-            function handleTouchStart(e) {
-                if (!playerReady) return;
-                
-                const touch = e.touches[0];
-                startX = touch.clientX;
-                startY = touch.clientY;
-                
-                // Start long press timer
-                longPressTimer = setTimeout(() => {
-                    player.setPlaybackRate(2);
-                    showHud(speedHud, 1000);
-                }, CONFIG.LONG_PRESS_DURATION);
-                
-                // Don't prevent default - let YouTube handle single taps
-            }
-            
-            // Touch move event
-            function handleTouchMove(e) {
-                if (!playerReady || !startX || !startY) return;
-                
-                const touch = e.touches[0];
-                const deltaX = touch.clientX - startX;
-                const deltaY = touch.clientY - startY;
-                
-                // Check if we've moved enough to start a gesture
-                if (!isGestureActive && 
-                    (Math.abs(deltaX) > CONFIG.GESTURE_THRESHOLD || 
-                     Math.abs(deltaY) > CONFIG.GESTURE_THRESHOLD)) {
-                    
-                    // Cancel long press
-                    clearTimeout(longPressTimer);
-                    
-                    // Determine gesture type
-                    if (Math.abs(deltaX) > Math.abs(deltaY)) {
-                        // Horizontal movement - seeking
-                        gestureType = 'seek';
-                    } else {
-                        // Vertical movement - determine which side
-                        if (startX < window.innerWidth / 2) {
-                            gestureType = 'brightness';
-                        } else {
-                            gestureType = 'volume';
-                        }
-                    }
-                    
-                    isGestureActive = true;
-                    e.preventDefault(); // Only prevent default when we're actively handling a gesture
-                }
-                
-                // Handle active gesture
-                if (isGestureActive) {
-                    if (gestureType === 'seek') {
-                        const timeDelta = (deltaX / window.innerWidth) * (player.getDuration() || 600) * CONFIG.SEEK_SENSITIVITY;
-                        seekVideo(timeDelta);
-                    } 
-                    else if (gestureType === 'volume') {
-                        const delta = -deltaY / window.innerHeight; // Invert for natural feel
-                        const volumeDelta = delta * 100 / CONFIG.VOLUME_SENSITIVITY;
-                        adjustVolume(volumeDelta);
-                    } 
-                    else if (gestureType === 'brightness') {
-                        const delta = -deltaY / window.innerHeight; // Invert for natural feel
-                        const brightnessDelta = delta / CONFIG.BRIGHTNESS_SENSITIVITY;
-                        adjustBrightness(brightnessDelta);
-                    }
-                    
-                    // Update start position for continuous tracking
-                    startX = touch.clientX;
-                    startY = touch.clientY;
-                }
-            }
-            
-            // Touch end event
-            function handleTouchEnd(e) {
-                clearTimeout(longPressTimer);
-                
-                // Reset playback speed if long press was active
-                if (playerReady && player.getPlaybackRate() !== 1) {
-                    player.setPlaybackRate(1);
-                }
-                
-                // Reset gesture state
-                isGestureActive = false;
-                gestureType = null;
-                startX = null;
-                startY = null;
-            }
-            
-            // Add event listeners to gesture panels
-            const panels = [leftPanel, centerPanel, rightPanel];
-            panels.forEach(panel => {
-                panel.addEventListener('touchstart', handleTouchStart, { passive: true });
-                panel.addEventListener('touchmove', handleTouchMove, { passive: false });
-                panel.addEventListener('touchend', handleTouchEnd);
-            });
-            
-            // Double tap for play/pause on center panel
-            centerPanel.addEventListener('touchend', function(e) {
-                const currentTime = new Date().getTime();
-                const tapLength = currentTime - lastTapTime;
-                
-                if (tapLength < CONFIG.DOUBLE_TAP_DELAY && tapLength > 0) {
-                    // Double tap detected
-                    togglePlayPause();
-                    e.preventDefault(); // Only prevent default for double taps
-                }
-                
-                lastTapTime = currentTime;
-            });
-        }
-
-        // Initialize the player
-        function init() {
-            initYouTubePlayer();
-            initGestureControls();
-            
-            // Handle window resize
-            window.addEventListener('resize', handleResize);
-        }
-
-        // Start initialization when DOM is loaded
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', init);
-        } else {
-            init();
-        }
-    </script>
+/* --- Gestures --- */
+let velocity=0,lastMove=0,lastX=0;
+gestureZone.addEventListener("touchstart",e=>{
+  if(!ready||e.touches.length!==1)return;
+  startX=e.touches[0].clientX;startY=e.touches[0].clientY;gesture=null;
+  lastMove=Date.now();lastX=startX;
+  // long press for 2x
+  longPressTimer=setTimeout(()=>{
+    player.setPlaybackRate(2);
+    showSeekHud(player.getCurrentTime(),player.getDuration(),0);
+    seekHud.innerHTML="2× Speed";
+  },500);
+});
+gestureZone.addEventListener("touchmove",e=>{
+  const t=e.touches[0];const dx=t.clientX-startX,dy=t.clientY-startY;
+  clearTimeout(longPressTimer);
+  const adx=Math.abs(dx),ady=Math.abs(dy);
+  if(!gesture){
+    if(adx>ady&&adx>10)gesture="seek";
+    else if(ady>adx&&ady>10)gesture=(startX>window.innerWidth/2)?"volume":"brightness";
+  }
+  if(gesture==="seek"){
+    const dur=player.getDuration()||0,cur=player.getCurrentTime()||0;
+    const now=Date.now();const dt=now-lastMove;
+    velocity=(dx-lastX)/dt;lastMove=now;lastX=dx;
+    const baseDelta=dx/window.innerWidth*SEEK_MAX;
+    const delta=baseDelta*(1+Math.abs(velocity*SEEK_VELOCITY_SCALE));
+    const preview=Math.max(0,Math.min(dur,cur+delta));
+    showSeekHud(preview,dur,delta);
+  }else if(gesture==="volume"){
+    let v=player.getVolume()+(-dy/window.innerHeight*VOLUME_STEP);
+    v=Math.max(0,Math.min(100,v));
+    player.setVolume(v);currentVol=v;showVolHud(v);
+  }else if(gesture==="brightness"){
+    brightness+=(-dy/window.innerHeight*BRIGHTNESS_STEP);
+    brightness=Math.max(0.5,Math.min(1.6,brightness));
+    document.getElementById("yt-player").style.filter=`brightness(${brightness})`;
+    const percent=Math.round((brightness-0.5)/1.1*100);
+    showBrightHud(percent);
+  }
+  e.preventDefault();
+},{passive:false});
+gestureZone.addEventListener("touchend",e=>{
+  clearTimeout(longPressTimer);
+  if(!ready)return;
+  const now=Date.now();
+  const dx=e.changedTouches[0].clientX-startX;
+  if(gesture==="seek"){
+    const dur=player.getDuration()||0,cur=player.getCurrentTime()||0;
+    const delta=dx/window.innerWidth*SEEK_MAX*(1+Math.abs(velocity*SEEK_VELOCITY_SCALE));
+    const dest=Math.max(0,Math.min(dur,cur+delta));
+    player.seekTo(dest,true);
+    showSeekHud(dest,dur,delta);
+  }else{
+    // double tap skip
+    if(now-lastTap<300){
+      const half=window.innerWidth/2;
+      if(startX<half){
+        player.seekTo(Math.max(0,player.getCurrentTime()-10),true);
+        showSeekHud(player.getCurrentTime()-10,player.getDuration(),-10);
+      }else{
+        player.seekTo(player.getCurrentTime()+10,true);
+        showSeekHud(player.getCurrentTime()+10,player.getDuration(),+10);
+      }
+      lastTap=0;
+    }else{
+      // single tap — trigger native controls visibility
+      try {
+        const evt = new MouseEvent('click', {bubbles:true,cancelable:true});
+        document.elementFromPoint(e.changedTouches[0].clientX, e.changedTouches[0].clientY)?.dispatchEvent(evt);
+      } catch(ex){}
+      lastTap=now;
+    }
+  }
+  // reset playback speed
+  if(player.getPlaybackRate()>1)setTimeout(()=>player.setPlaybackRate(1),500);
+  gesture=null;
+});
+</script>
 </body>
 </html>
