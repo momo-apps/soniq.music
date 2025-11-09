@@ -3,18 +3,18 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-<title>Soniq — Android Player (Enhanced)</title>
+<title>Soniq — Android Player (Refined)</title>
 <style>
   html,body{
     margin:0;height:100%;overflow:hidden;background:#000;color:#fff;
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial;
   }
   #playerWrap{position:relative;width:100%;height:100%;background:#000;}
-  #yt-player{width:100%;height:100%;background:#000;position:relative;z-index:1;transition:transform .3s ease,object-fit .3s ease;}
+  #yt-player{width:100%;height:100%;background:#000;position:relative;z-index:1;}
   /* gesture zone: safe middle area */
   #gestureZone{
     position:absolute;left:0;right:0;
-    top:var(--top,20%);bottom:var(--bottom,20%);
+    top:var(--top,15%);bottom:var(--bottom,15%);
     z-index:5;touch-action:none;
   }
   /* HUDs */
@@ -33,72 +33,85 @@
     opacity:0;transition:opacity .2s;z-index:10;
   }
   .hudBox.visible{display:flex;opacity:1;}
-  #vHud{right:20px;} #bHud{left:20px;}
-  .hudBar{width:4px;height:100px;background:rgba(255,255,255,0.2);border-radius:2px;overflow:hidden;display:flex;align-items:flex-end;}
-  .hudBarFill{width:100%;height:50%;background:#fff;border-radius:2px 2px 0 0;transition:height .1s;}
-  /* bottom control bar */
-  #controlsBar{
-    position:absolute;bottom:10px;left:50%;transform:translateX(-50%);
-    display:flex;align-items:center;gap:16px;z-index:20;
-    background:rgba(0,0,0,0.6);padding:10px 20px;border-radius:30px;
-    opacity:0;transition:opacity .3s;
+  #vHud{right:20px;} /* volume HUD shows on right */
+  #bHud{left:20px;} /* brightness HUD shows on left */
+  .hudBar{
+    width:4px;height:100px;background:rgba(255,255,255,0.2);
+    border-radius:2px;overflow:hidden;display:flex;align-items:flex-end;
   }
-  #controlsBar.visible{opacity:1;}
-  .ctrl-btn{
-    background:none;border:0;color:#fff;font-size:20px;cursor:pointer;
-    padding:8px 12px;transition:opacity .2s;
+  .hudBarFill{
+    width:100%;height:50%;background:#fff;border-radius:2px 2px 0 0;
+    transition:height .1s;
   }
-  .ctrl-btn:hover{opacity:0.7;}
+  /* Custom control bar */
+  #controlBar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background: rgba(0,0,0,0.75);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    z-index: 10;
+  }
+  #playPauseBtn, #aspectBtn {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 24px;
+    padding: 10px;
+    border-radius: 50%;
+    cursor: pointer;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+  }
+  #playPauseBtn:hover, #aspectBtn:hover {
+    opacity: 1;
+  }
 </style>
 </head>
 <body>
   <div id="playerWrap">
     <div id="yt-player"></div>
+    <!-- gesture zone between title and progress bar -->
     <div id="gestureZone"></div>
-
     <!-- HUD overlays -->
     <div id="seekHud">00:00:00 / 00:00:00<br>[ +0 s ]</div>
     <div id="vHud" class="hudBox"><span>🔊</span><div class="hudBar"><div class="hudBarFill" id="vFill"></div></div></div>
     <div id="bHud" class="hudBox"><span>🌞</span><div class="hudBar"><div class="hudBarFill" id="bFill"></div></div></div>
-
-    <!-- Bottom Controls -->
-    <div id="controlsBar">
-      <button id="btnPlayPause" class="ctrl-btn">⏯</button>
-      <button id="btnAspect" class="ctrl-btn">🖼</button>
+    <!-- Custom controls -->
+    <div id="controlBar">
+      <button id="playPauseBtn">⏸️</button>
+      <button id="aspectBtn">16:9</button>
     </div>
   </div>
-
 <script>
-/* ========== CONFIG CONSTANTS ========== */
-const SEEK_MAX = 120;
-const SEEK_VELOCITY_SCALE = 25;
-const BRIGHTNESS_STEP = 0.5;
-const VOLUME_STEP = 100;
-const GESTURE_ZONE_TOP = 20;
-const GESTURE_ZONE_BOTTOM = 20;
-const DOUBLE_TAP_THRESHOLD = 300;
-const CONTROLS_HIDE_DELAY = 3000;
-const ASPECT_MODES = ['fit','fill','zoom'];
-/* ===================================== */
-
+/* ================== CONFIG CONSTANTS ================== */
+const SEEK_MAX = 120; // base max seek range (seconds)
+const SEEK_VELOCITY_SCALE = 25; // velocity multiplier sensitivity
+const BRIGHTNESS_STEP = 0.5; // brightness sensitivity
+const VOLUME_STEP = 100; // volume sensitivity (%)
+const GESTURE_ZONE_TOP = 20; // top % boundary
+const GESTURE_ZONE_BOTTOM = 20; // bottom % boundary
+/* ====================================================== */
 document.documentElement.style.setProperty('--top', GESTURE_ZONE_TOP + '%');
 document.documentElement.style.setProperty('--bottom', GESTURE_ZONE_BOTTOM + '%');
-
 const params = new URLSearchParams(location.search);
 const videoId = params.get("videoId") || "dQw4w9WgXcQ";
-
 let player, ready=false, brightness=1, currentVol=60;
 let startX=0,startY=0,gesture=null,lastTap=0,longPressTimer=null;
-let velocity=0,lastMove=0,lastX=0,controlsTimer=null,aspectIndex=0;
-
 const seekHud=document.getElementById("seekHud");
 const vHud=document.getElementById("vHud"),bHud=document.getElementById("bHud");
 const vFill=document.getElementById("vFill"),bFill=document.getElementById("bFill");
 const gestureZone=document.getElementById("gestureZone");
-const controlsBar=document.getElementById("controlsBar");
-const btnPlayPause=document.getElementById("btnPlayPause");
-const btnAspect=document.getElementById("btnAspect");
-
+const controlBar = document.getElementById("controlBar");
+const playPauseBtn = document.getElementById("playPauseBtn");
+const aspectBtn = document.getElementById("aspectBtn");
+let controlsVisible = false;
+let currentAspect = 'fit';
 /* --- YouTube API --- */
 (function(){
   const tag=document.createElement("script");
@@ -109,22 +122,26 @@ function onYouTubeIframeAPIReady(){
   player=new YT.Player("yt-player",{
     videoId:videoId,
     playerVars:{
-      autoplay:1,controls:1,rel:0,modestbranding:1,playsinline:1,
+      autoplay:1,controls:0,rel:0,modestbranding:1,playsinline:1,
       enablejsapi:1,iv_load_policy:3,fs:0,disablekb:1
     },
-    events:{onReady:onPlayerReady,onStateChange:onStateChange}
+    events:{onReady:onPlayerReady, onStateChange:onStateChange}
   });
 }
 function onPlayerReady(){
   ready=true;
   player.setVolume(currentVol);
   player.playVideo();
-  showControlsTemporarily();
+  playPauseBtn.innerHTML = '⏸️';
 }
-function onStateChange(){
-  updatePlayButton();
+function onStateChange(event) {
+  const state = event.data;
+  if (state === YT.PlayerState.PLAYING) {
+    playPauseBtn.innerHTML = '⏸️';
+  } else {
+    playPauseBtn.innerHTML = '▶️';
+  }
 }
-
 /* --- Utility --- */
 function fmt(sec){sec=Math.max(0,Math.floor(sec||0));
   const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;
@@ -135,26 +152,61 @@ function showSeekHud(cur,dur,delta){
   seekHud.classList.add("visible");
   clearTimeout(seekHud._t);seekHud._t=setTimeout(()=>seekHud.classList.remove("visible"),900);
 }
-function showVolHud(v){vFill.style.height=v+"%";vHud.classList.add("visible");
-  clearTimeout(vHud._t);vHud._t=setTimeout(()=>vHud.classList.remove("visible"),900);}
-function showBrightHud(p){bFill.style.height=p+"%";bHud.classList.add("visible");
-  clearTimeout(bHud._t);bHud._t=setTimeout(()=>bHud.classList.remove("visible"),900);}
-function updatePlayButton(){
-  if(!ready)return;
-  const st=player.getPlayerState();
-  btnPlayPause.textContent=(st===1)?'⏸':'▶️';
+function showVolHud(v){
+  vFill.style.height=v+"%";vHud.classList.add("visible");
+  clearTimeout(vHud._t);vHud._t=setTimeout(()=>vHud.classList.remove("visible"),900);
 }
-function showControlsTemporarily(){
-  controlsBar.classList.add("visible");
-  clearTimeout(controlsTimer);
-  controlsTimer=setTimeout(()=>controlsBar.classList.remove("visible"),CONTROLS_HIDE_DELAY);
+function showBrightHud(p){
+  bFill.style.height=p+"%";bHud.classList.add("visible");
+  clearTimeout(bHud._t);bHud._t=setTimeout(()=>bHud.classList.remove("visible"),900);
 }
-
+/* --- Custom Controls --- */
+playPauseBtn.addEventListener('click', () => {
+  const state = player.getPlayerState();
+  if (state === YT.PlayerState.PLAYING) {
+    player.pauseVideo();
+  } else if (state !== YT.PlayerState.ENDED) {
+    player.playVideo();
+  }
+});
+aspectBtn.addEventListener('click', () => {
+  const playerEl = document.getElementById("yt-player");
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  if (currentAspect === 'fit') {
+    const ratio = 16 / 9;
+    let pw, ph;
+    if (w / h > ratio) {
+      ph = h;
+      pw = h * ratio;
+    } else {
+      pw = w;
+      ph = w / ratio;
+    }
+    player.setSize(pw, ph);
+    playerEl.style.position = 'absolute';
+    playerEl.style.left = '50%';
+    playerEl.style.top = '50%';
+    playerEl.style.transform = 'translate(-50%, -50%)';
+    currentAspect = '16:9';
+    aspectBtn.innerHTML = 'Fit';
+  } else {
+    player.setSize(w, h);
+    playerEl.style.position = 'relative';
+    playerEl.style.left = '';
+    playerEl.style.top = '';
+    playerEl.style.transform = '';
+    currentAspect = 'fit';
+    aspectBtn.innerHTML = '16:9';
+  }
+});
 /* --- Gestures --- */
+let velocity=0,lastMove=0,lastX=0;
 gestureZone.addEventListener("touchstart",e=>{
   if(!ready||e.touches.length!==1)return;
   startX=e.touches[0].clientX;startY=e.touches[0].clientY;gesture=null;
   lastMove=Date.now();lastX=startX;
+  // long press for 2x
   longPressTimer=setTimeout(()=>{
     player.setPlaybackRate(2);
     showSeekHud(player.getCurrentTime(),player.getDuration(),0);
@@ -195,47 +247,57 @@ gestureZone.addEventListener("touchend",e=>{
   if(!ready)return;
   const now=Date.now();
   const dx=e.changedTouches[0].clientX-startX;
-  const dy=e.changedTouches[0].clientY-startY;
   if(gesture==="seek"){
     const dur=player.getDuration()||0,cur=player.getCurrentTime()||0;
     const delta=dx/window.innerWidth*SEEK_MAX*(1+Math.abs(velocity*SEEK_VELOCITY_SCALE));
     const dest=Math.max(0,Math.min(dur,cur+delta));
     player.seekTo(dest,true);
     showSeekHud(dest,dur,delta);
-  }else if(Math.abs(dx)<10 && Math.abs(dy)<10){ // tap
-    if(now-lastTap<DOUBLE_TAP_THRESHOLD){
-      // double tap in center → play/pause
-      togglePlayPause();
-      lastTap=0;
-    }else{
-      // single tap → show/hide controls
-      if(controlsBar.classList.contains("visible"))
-        controlsBar.classList.remove("visible");
-      else showControlsTemporarily();
-      lastTap=now;
+  }else{
+    const tapTime = now - lastTap;
+    if(tapTime < 300){
+      // double tap
+      lastTap = 0;
+      const center = window.innerWidth / 2;
+      const middleZone = window.innerWidth * 0.2; // +/- 10% for middle
+      if(Math.abs(startX - center) < middleZone / 2){
+        // middle double tap: play/pause
+        const state = player.getPlayerState();
+        if(state === YT.PlayerState.PLAYING){
+          player.pauseVideo();
+        } else if(state !== YT.PlayerState.ENDED){
+          player.playVideo();
+        }
+      } else {
+        // side double tap: skip
+        const skipSec = startX < center ? -10 : 10;
+        const curTime = player.getCurrentTime();
+        const dur = player.getDuration();
+        const newTime = Math.max(0, Math.min(dur, curTime + skipSec));
+        player.seekTo(newTime, true);
+        showSeekHud(newTime, dur, skipSec);
+      }
+    } else {
+      // single tap: toggle controls bar
+      if(controlsVisible){
+        controlBar.style.display = 'none';
+        controlsVisible = false;
+      } else {
+        controlBar.style.display = 'flex';
+        controlsVisible = true;
+        clearTimeout(controlBar.hideTimeout);
+        controlBar.hideTimeout = setTimeout(() => {
+          controlBar.style.display = 'none';
+          controlsVisible = false;
+        }, 3000);
+      }
+      lastTap = now;
     }
   }
+  // reset playback speed
   if(player.getPlaybackRate()>1)setTimeout(()=>player.setPlaybackRate(1),500);
   gesture=null;
 });
-
-/* --- Control buttons --- */
-btnPlayPause.onclick=togglePlayPause;
-function togglePlayPause(){
-  const st=player.getPlayerState();
-  if(st===1) player.pauseVideo(); else player.playVideo();
-  updatePlayButton(); showControlsTemporarily();
-}
-btnAspect.onclick=()=>{
-  aspectIndex=(aspectIndex+1)%ASPECT_MODES.length;
-  const mode=ASPECT_MODES[aspectIndex];
-  const p=document.getElementById("yt-player");
-  if(mode==='fit'){p.style.objectFit='contain';p.style.transform='scale(1)';}
-  if(mode==='fill'){p.style.objectFit='cover';p.style.transform='scale(1)';}
-  if(mode==='zoom'){p.style.objectFit='cover';p.style.transform='scale(1.2)';}
-  btnAspect.textContent=(mode==='fit')?'🖼':(mode==='fill')?'🔲':'🔍';
-  showControlsTemporarily();
-};
 </script>
 </body>
 </html>
