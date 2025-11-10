@@ -51,6 +51,15 @@ const DOUBLE_TAP_THRESHOLD = 300; // ms for double-tap
 const CONTROLS_HIDE_MS = 3000;    // ms to auto-hide custom controls
 /* ----------------------------------------------- */
 
+  // Ensure Flutter's JS bridge reference exists early
+window.SoniqBridge = {
+  play: ()=>{},
+  pause: ()=>{},
+  seekTo: ()=>{},
+  setVolume: ()=>{},
+  getState: ()=>({ready:false})
+};
+
 /* Helpers to read URL params */
 const urlParams = new URLSearchParams(location.search);
 const videoId = urlParams.get('videoId') || 'dQw4w9WgXcQ';
@@ -198,7 +207,6 @@ window.addEventListener('resize', ()=> {
 
 /* ------------------ Gesture & HUD layer ------------------ */
 let startX=0, startY=0, gesture=null, lastMove=0, lastX=0, velocity=0, longPressTimer=null, lastTap=0;
-const controlsBar = document.getElementById('controlsBar');
 let controlsTimeout=null;
 const showControls = ()=>{ controlsBar.classList.add('visible'); clearTimeout(controlsTimeout); controlsTimeout=setTimeout(()=>controlsBar.classList.remove('visible'), CONTROLS_HIDE_MS); };
 const hideControls = ()=>{ controlsBar.classList.remove('visible'); clearTimeout(controlsTimeout); };
@@ -340,7 +348,7 @@ window.addEventListener('message', (ev) => {
   } catch(e){}
 });
 
-/* small safety: expose API to host via window.SoniqBridge */
+/* small safety: expose API to host via  */
 window.SoniqBridge = {
   play: ()=>{ if(player) player.playVideo(); },
   pause: ()=>{ if(player) player.pauseVideo(); },
