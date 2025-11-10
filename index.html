@@ -2,205 +2,355 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1.0" />
-<title>Soniq — Android Player (Refined)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no" />
+<title>Soniq — WebView YouTube Player</title>
 <style>
-  html,body{
-    margin:0;height:100%;overflow:hidden;background:#000;color:#fff;
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial;
-  }
-  #playerWrap{position:relative;width:100%;height:100%;background:#000;}
-  #yt-player{width:100%;height:100%;background:#000;position:relative;z-index:1;}
-  /* gesture zone: safe middle area */
-  #gestureZone{
-    position:absolute;left:0;right:0;
-    top:var(--top,15%);bottom:var(--bottom,15%);
-    z-index:5;touch-action:none;
-  }
-  /* HUDs */
-  #seekHud{
-    position:absolute;left:50%;top:50%;
-    transform:translate(-50%,-50%) scale(1);
-    background:rgba(0,0,0,0.75);padding:12px 18px;border-radius:12px;
-    font-weight:600;font-size:16px;text-align:center;display:none;opacity:0;
-    transition:opacity .2s,transform .2s;z-index:10;
-  }
-  #seekHud.visible{display:block;opacity:1;transform:translate(-50%,-50%) scale(1.05);}
-  .hudBox{
-    position:absolute;top:50%;transform:translateY(-50%);
-    background:rgba(0,0,0,0.75);padding:10px 14px;border-radius:10px;
-    color:#fff;font-size:14px;display:none;align-items:center;gap:8px;
-    opacity:0;transition:opacity .2s;z-index:10;
-  }
-  .hudBox.visible{display:flex;opacity:1;}
-  #vHud{right:20px;}  /* volume HUD shows on right */
-  #bHud{left:20px;}   /* brightness HUD shows on left */
-  .hudBar{
-    width:4px;height:100px;background:rgba(255,255,255,0.2);
-    border-radius:2px;overflow:hidden;display:flex;align-items:flex-end;
-  }
-  .hudBarFill{
-    width:100%;height:50%;background:#fff;border-radius:2px 2px 0 0;
-    transition:height .1s;
-  }
+  html,body{height:100%;margin:0;background:#000;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial;overflow:hidden}
+  .embed-container, #playerWrap{position:relative;width:100%;height:100%;}
+  /* ensure iframe/container fills */
+  .embed-container iframe, .embed-container object, .embed-container embed {position:absolute;top:0;left:0;width:100% !important;height:100% !important;}
+  /* overlay + HUDs */
+  #gestureZone{position:absolute;left:0;right:0;top:20%;bottom:20%;z-index:5;touch-action:none}
+  #seekHud{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.78);padding:12px 16px;border-radius:10px;font-weight:700;display:none;z-index:20}
+  #seekHud.visible{display:block}
+  .hudBox{position:absolute;top:50%;transform:translateY(-50%);background:rgba(0,0,0,.78);padding:8px;border-radius:10px;display:none;z-index:20;align-items:center}
+  .hudBox.visible{display:flex}
+  #vHud{right:18px} #bHud{left:18px}
+  .hudBar{width:6px;height:100px;background:rgba(255,255,255,0.12);border-radius:4px;overflow:hidden;display:flex;align-items:flex-end}
+  .hudBarFill{width:100%;height:50%;background:#fff;transition:height .06s linear}
+  /* controls bar (optional center bottom) */
+  #controlsBar{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);z-index:25;display:flex;gap:12px;background:rgba(0,0,0,0.5);padding:8px;border-radius:30px;opacity:0;transition:opacity .18s}
+  #controlsBar.visible{opacity:1}
+  .ctrl-btn{background:none;border:0;color:#fff;font-size:18px;padding:8px 12px;cursor:pointer}
 </style>
 </head>
 <body>
-  <div id="playerWrap">
-    <div id="yt-player"></div>
-
-    <!-- gesture zone between title and progress bar -->
-    <div id="gestureZone"></div>
-
-    <!-- HUD overlays -->
-    <div id="seekHud">00:00:00 / 00:00:00<br>[ +00:00 ]</div>
-    <div id="vHud" class="hudBox"><span>🔊</span><div class="hudBar"><div class="hudBarFill" id="vFill"></div></div></div>
-    <div id="bHud" class="hudBox"><span>🌞</span><div class="hudBar"><div class="hudBarFill" id="bFill"></div></div></div>
+  <div class="embed-container">
+    <div id="playerWrap">
+      <div id="yt-player"></div>
+      <!-- gesture safe zone -->
+      <div id="gestureZone"></div>
+      <!-- HUDs -->
+      <div id="seekHud">00:00:00 / 00:00:00<br>[ +00:00 ]</div>
+      <div id="vHud" class="hudBox"><span style="margin-right:8px">🔊</span><div class="hudBar"><div id="vFill" class="hudBarFill" style="height:60%"></div></div></div>
+      <div id="bHud" class="hudBox"><span style="margin-right:8px">🌞</span><div class="hudBar"><div id="bFill" class="hudBarFill" style="height:45%"></div></div></div>
+      <!-- small bottom control bar -->
+      <div id="controlsBar"><button id="btnPlay" class="ctrl-btn">▶︎</button><button id="btnAspect" class="ctrl-btn">⤢</button></div>
+    </div>
   </div>
 
 <script>
-/* ================== CONFIG CONSTANTS ================== */
-const SEEK_MAX = 120;            // base max seek range (seconds)
-const SEEK_VELOCITY_SCALE = 10;  // velocity multiplier sensitivity
-const BRIGHTNESS_STEP = 0.05;     // brightness sensitivity
-const VOLUME_STEP = 10;         // volume sensitivity (%)
-const GESTURE_ZONE_TOP = 20;     // top % boundary
-const GESTURE_ZONE_BOTTOM = 20;  // bottom % boundary
-/* ====================================================== */
+/* --------- Config constants (tweakable) --------- */
+const SEEK_MAX = 120;             // base time (seconds) for full-width swipe
+const SEEK_VELOCITY_SCALE = 12;   // velocity sensitivity (lower -> less boost)
+const BRIGHTNESS_STEP = 0.5;      // brightness sensitivity multiplier
+const VOLUME_STEP = 100;          // vertical->volume mapping (percent)
+const GESTURE_TOP_PCT = 20;       // gesture zone top % (applied inline too)
+const GESTURE_BOTTOM_PCT = 20;    // gesture zone bottom %
+const DOUBLE_TAP_THRESHOLD = 300; // ms for double-tap
+const CONTROLS_HIDE_MS = 3000;    // ms to auto-hide custom controls
+/* ----------------------------------------------- */
 
-document.documentElement.style.setProperty('--top', GESTURE_ZONE_TOP + '%');
-document.documentElement.style.setProperty('--bottom', GESTURE_ZONE_BOTTOM + '%');
+/* Helpers to read URL params */
+const urlParams = new URLSearchParams(location.search);
+const videoId = urlParams.get('videoId') || 'dQw4w9WgXcQ';
+let platform = (urlParams.get('platform') || 'web').toLowerCase();
 
-const params = new URLSearchParams(location.search);
-const videoId = params.get("videoId") || "dQw4w9WgXcQ";
-
-let player, ready=false, brightness=1, currentVol=60;
-let startX=0,startY=0,gesture=null,lastTap=0,longPressTimer=null;
-
-const seekHud=document.getElementById("seekHud");
-const vHud=document.getElementById("vHud"),bHud=document.getElementById("bHud");
-const vFill=document.getElementById("vFill"),bFill=document.getElementById("bFill");
-const gestureZone=document.getElementById("gestureZone");
-
-/* --- YouTube API --- */
-(function(){
-  const tag=document.createElement("script");
-  tag.src="https://www.youtube.com/iframe_api";
-  document.head.appendChild(tag);
-})();
-function onYouTubeIframeAPIReady(){
-  player=new YT.Player("yt-player",{
-    videoId:videoId,
-    playerVars:{
-      autoplay:1,controls:1,rel:0,modestbranding:1,playsinline:1,
-      enablejsapi:1,iv_load_policy:3,fs:0,disablekb:1
-    },
-    events:{onReady:onPlayerReady}
-  });
-}
-function onPlayerReady(){
-  ready=true;
-  player.setVolume(currentVol);
-  player.playVideo();
+/* quick platform detection (can be overridden by param) */
+if(!urlParams.has('platform')){
+  if(window.JSBridge || (typeof Android !== 'undefined')) platform='android';
+  else platform='web';
 }
 
-/* --- Utility --- */
-function fmt(sec){sec=Math.max(0,Math.floor(sec||0));
-  const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;
-  return (h>0?h.toString().padStart(2,"0")+":":"")+m.toString().padStart(2,"0")+":"+s.toString().padStart(2,"0");
-}
-function showSeekHud(cur,dur,delta){
-  seekHud.innerHTML=`${fmt(cur)} / ${fmt(dur)}<br>[ ${delta>0?"+":""}${fmt(Math.abs(delta))} ]`;
-  seekHud.classList.add("visible");
-  clearTimeout(seekHud._t);seekHud._t=setTimeout(()=>seekHud.classList.remove("visible"),900);
-}
-function showVolHud(v){
-  vFill.style.height=v+"%";vHud.classList.add("visible");
-  clearTimeout(vHud._t);vHud._t=setTimeout(()=>vHud.classList.remove("visible"),900);
-}
-function showBrightHud(p){
-  bFill.style.height=p+"%";bHud.classList.add("visible");
-  clearTimeout(bHud._t);bHud._t=setTimeout(()=>bHud.classList.remove("visible"),900);
-}
+/* DOM refs */
+const gestureZone = document.getElementById('gestureZone');
+const seekHud = document.getElementById('seekHud');
+const vHud = document.getElementById('vHud'), bHud = document.getElementById('bHud');
+const vFill = document.getElementById('vFill'), bFill = document.getElementById('bFill');
+const controlsBar = document.getElementById('controlsBar'), btnPlay = document.getElementById('btnPlay'), btnAspect = document.getElementById('btnAspect');
 
-/* --- Gestures --- */
-let velocity=0,lastMove=0,lastX=0;
-gestureZone.addEventListener("touchstart",e=>{
-  if(!ready||e.touches.length!==1)return;
-  startX=e.touches[0].clientX;startY=e.touches[0].clientY;gesture=null;
-  lastMove=Date.now();lastX=startX;
-  // long press for 2x
-  longPressTimer=setTimeout(()=>{
-    player.setPlaybackRate(2);
-    showSeekHud(player.getCurrentTime(),player.getDuration(),0);
-    seekHud.innerHTML="2× Speed";
-  },500);
-});
-gestureZone.addEventListener("touchmove",e=>{
-  const t=e.touches[0];const dx=t.clientX-startX,dy=t.clientY-startY;
-  clearTimeout(longPressTimer);
-  const adx=Math.abs(dx),ady=Math.abs(dy);
-  if(!gesture){
-    if(adx>ady&&adx>10)gesture="seek";
-    else if(ady>adx&&ady>10)gesture=(startX>window.innerWidth/2)?"volume":"brightness";
+gestureZone.style.top = GESTURE_TOP_PCT + '%';
+gestureZone.style.bottom = GESTURE_BOTTOM_PCT + '%';
+
+/* messaging bridge to host (tries several fallbacks) */
+function sendPlatformMessage(message) {
+  const msgStr = typeof message === 'string' ? message : JSON.stringify(message);
+  try {
+    // Flutter webview_flutter uses JS channel name: JSBridge -> window.JSBridge.postMessage
+    if (window.JSBridge && typeof window.JSBridge.postMessage === 'function') {
+      window.JSBridge.postMessage(msgStr); return;
+    }
+    // A common Android WebView interface might be injected as window.Android
+    if (window.Android && typeof window.Android.postMessage === 'function') {
+      window.Android.postMessage(msgStr); return;
+    }
+    // fallback to parent (useful for web or testing)
+    window.parent.postMessage(msgStr, '*');
+  } catch (e) {
+    // silent
   }
-  if(gesture==="seek"){
-    const dur=player.getDuration()||0,cur=player.getCurrentTime()||0;
-    const now=Date.now();const dt=now-lastMove;
-    velocity=(dx-lastX)/dt;lastMove=now;lastX=dx;
-    const baseDelta=dx/window.innerWidth*SEEK_MAX;
-    const delta=baseDelta*(1+Math.abs(velocity*SEEK_VELOCITY_SCALE));
-    const preview=Math.max(0,Math.min(dur,cur+delta));
-    showSeekHud(preview,dur,delta);
-  }else if(gesture==="volume"){
-    let v=player.getVolume()+(-dy/window.innerHeight*VOLUME_STEP);
-    v=Math.max(0,Math.min(100,v));
-    player.setVolume(v);currentVol=v;showVolHud(v);
-  }else if(gesture==="brightness"){
-    brightness+=(-dy/window.innerHeight*BRIGHTNESS_STEP);
-    brightness=Math.max(0.5,Math.min(1.6,brightness));
-    document.getElementById("yt-player").style.filter=`brightness(${brightness})`;
-    const percent=Math.round((brightness-0.5)/1.1*100);
-    showBrightHud(percent);
+}
+
+/* wrapper to send typed messages */
+function sendMessage(key, data) {
+  const message = { playerId: 'soniq-player', [key]: data };
+  sendPlatformMessage(message);
+}
+
+/* ------------------ YouTube IFrame and bridge ------------------ */
+let player, isReady=false, currentVol = 60, brightness = 1.0;
+
+(function loadYT() {
+  const s = document.createElement('script');
+  s.src = 'https://www.youtube.com/iframe_api';
+  s.async = true;
+  document.head.appendChild(s);
+})();
+
+function onYouTubeIframeAPIReady() {
+  player = new YT.Player('yt-player', {
+    width:'100%', height:'100%', videoId,
+    playerVars: {
+      autoplay: 1,
+      controls: 1,
+      rel: 0,
+      modestbranding: 1,
+      playsinline: 1,
+      enablejsapi: 1,
+      iv_load_policy: 3,
+      fs: 0,
+      origin: window.location.origin
+    },
+    events: {
+      onReady: function(e) {
+        isReady = true;
+        try { player.setVolume(currentVol); } catch(e){}
+        try { player.playVideo(); } catch(e){}
+        sendMessage('Ready', { videoId });
+      },
+      onStateChange: function(e) {
+        sendMessage('StateChange', e.data);
+        if(e.data === YT.PlayerState.PLAYING) {
+          // start sending periodic video state
+          startVideoPolling();
+        } else {
+          stopVideoPolling();
+        }
+      },
+      onPlaybackQualityChange: function(e) { sendMessage('PlaybackQualityChange', e.data); },
+      onPlaybackRateChange: function(e) { sendMessage('PlaybackRateChange', e.data); },
+      onError: function(e) { sendMessage('PlayerError', e.data); },
+    }
+  });
+  // ensure size fits
+  try { player.setSize(window.innerWidth, window.innerHeight); } catch(e){}
+}
+
+/* video state polling while playing */
+let pollTimer = null;
+function startVideoPolling(){
+  if(pollTimer) return;
+  pollTimer = setInterval(()=> {
+    try {
+      const state = { currentTime: player.getCurrentTime(), loadedFraction: player.getVideoLoadedFraction() };
+      sendMessage('VideoState', state);
+    } catch(e) {}
+  }, 200);
+}
+function stopVideoPolling(){
+  if(pollTimer){ clearInterval(pollTimer); pollTimer=null; }
+}
+
+/* handle incoming postMessage from host (if used) */
+window.addEventListener('message', (ev) => {
+  try {
+    const msg = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data;
+    if(msg && msg.command){
+      handleHostCommand(msg.command, msg.payload);
+    }
+  } catch(e){}
+});
+
+/* also expose a simple API callable via runJavascript: window.Soniq.handleCmd(...) */
+window.Soniq = {
+  handleCmd: (cmd, payload) => handleHostCommand(cmd, payload)
+};
+
+function handleHostCommand(cmd, payload){
+  if(!isReady) return;
+  try {
+    switch(cmd){
+      case 'play': player.playVideo(); break;
+      case 'pause': player.pauseVideo(); break;
+      case 'seek': if(typeof payload === 'number') player.seekTo(payload, true); break;
+      case 'setVolume': if(typeof payload === 'number') player.setVolume(payload); break;
+      case 'setPlaybackRate': if(typeof payload === 'number') player.setPlaybackRate(payload); break;
+      case 'setSize': if(payload && payload.w && payload.h) player.setSize(payload.w, payload.h); break;
+      default: break;
+    }
+  } catch(e){}
+}
+
+/* resize handling: keep iframe size in sync */
+window.addEventListener('resize', ()=> {
+  try { if(player && player.setSize) player.setSize(window.innerWidth, window.innerHeight); } catch(e){}
+});
+
+/* ------------------ Gesture & HUD layer ------------------ */
+let startX=0, startY=0, gesture=null, lastMove=0, lastX=0, velocity=0, longPressTimer=null, lastTap=0;
+const controlsBar = document.getElementById('controlsBar');
+let controlsTimeout=null;
+const showControls = ()=>{ controlsBar.classList.add('visible'); clearTimeout(controlsTimeout); controlsTimeout=setTimeout(()=>controlsBar.classList.remove('visible'), CONTROLS_HIDE_MS); };
+const hideControls = ()=>{ controlsBar.classList.remove('visible'); clearTimeout(controlsTimeout); };
+
+function fmtHMS(sec){
+  sec = Math.max(0, Math.floor(sec||0));
+  const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60;
+  return (h>0?String(h).padStart(2,'0')+':':'') + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+}
+
+function showSeekHUD(c,d,delta){
+  seekHud.innerHTML = `${fmtHMS(c)} / ${fmtHMS(d)}<br>[ ${delta>0?'+':''}${fmtHMS(Math.abs(Math.round(delta)))} ]`;
+  seekHud.classList.add('visible');
+  clearTimeout(seekHud._t); seekHud._t = setTimeout(()=>seekHud.classList.remove('visible'), 900);
+}
+function showVolHUD(v){ vFill.style.height = `${v}%`; vHud.classList.add('visible'); clearTimeout(vHud._t); vHud._t=setTimeout(()=>vHud.classList.remove('visible'),900); }
+function showBrightHUD(p){ bFill.style.height = `${p}%`; bHud.classList.add('visible'); clearTimeout(bHud._t); bHud._t=setTimeout(()=>bHud.classList.remove('visible'),900); }
+
+/* touch handlers inside gestureZone only */
+gestureZone.addEventListener('touchstart', (e)=>{
+  if(!isReady || e.touches.length !== 1) return;
+  const t = e.touches[0];
+  startX = t.clientX; startY = t.clientY; gesture = null;
+  lastMove = Date.now(); lastX = startX;
+  // long press -> 2x
+  clearTimeout(longPressTimer);
+  longPressTimer = setTimeout(()=>{
+    try { player.setPlaybackRate(2); showSeekHUD(player.getCurrentTime(), player.getDuration() || 0, 0); } catch(e){}
+  }, 500);
+}, {passive:true});
+
+gestureZone.addEventListener('touchmove', (e)=>{
+  if(!isReady || e.touches.length !== 1) return;
+  clearTimeout(longPressTimer);
+  const t = e.touches[0];
+  const dx = t.clientX - startX, dy = t.clientY - startY;
+  const adx = Math.abs(dx), ady = Math.abs(dy);
+
+  if(!gesture){
+    if(adx > ady && adx > 10) gesture = 'seek';
+    else if(ady > adx && ady > 10) gesture = (startX > window.innerWidth/2) ? 'volume' : 'brightness';
+  }
+
+  if(gesture === 'seek'){
+    const dur = (player && player.getDuration) ? (player.getDuration()||0) : 0;
+    const cur = (player && player.getCurrentTime) ? (player.getCurrentTime()||0) : 0;
+    const now = Date.now();
+    const dt = Math.max(1, now - lastMove);
+    velocity = (t.clientX - lastX) / dt;
+    lastMove = now; lastX = t.clientX;
+    const baseDelta = (dx / window.innerWidth) * SEEK_MAX;
+    const delta = baseDelta * (1 + Math.abs(velocity * SEEK_VELOCITY_SCALE));
+    const preview = Math.max(0, Math.min(dur, cur + delta));
+    showSeekHUD(preview, dur, delta);
+  } else if(gesture === 'volume'){
+    try {
+      let v = (player && player.getVolume) ? player.getVolume() : currentVol;
+      v += (-dy/window.innerHeight)*VOLUME_STEP;
+      v = Math.round(Math.max(0, Math.min(100, v)));
+      player.setVolume(v); currentVol = v; showVolHUD(v);
+    } catch(e){}
+  } else if(gesture === 'brightness'){
+    brightness += (-dy/window.innerHeight) * BRIGHTNESS_STEP;
+    brightness = Math.max(0.5, Math.min(1.6, brightness));
+    document.getElementById('yt-player').style.filter = `brightness(${brightness})`;
+    const pct = Math.round((brightness - 0.5)/1.1*100);
+    showBrightHUD(pct);
   }
   e.preventDefault();
-},{passive:false});
-gestureZone.addEventListener("touchend",e=>{
+}, {passive:false});
+
+gestureZone.addEventListener('touchend', (e)=>{
   clearTimeout(longPressTimer);
-  if(!ready)return;
-  const now=Date.now();
-  const dx=e.changedTouches[0].clientX-startX;
-  if(gesture==="seek"){
-    const dur=player.getDuration()||0,cur=player.getCurrentTime()||0;
-    const delta=dx/window.innerWidth*SEEK_MAX*(1+Math.abs(velocity*SEEK_VELOCITY_SCALE));
-    const dest=Math.max(0,Math.min(dur,cur+delta));
-    player.seekTo(dest,true);
-    showSeekHud(dest,dur,delta);
-  }else{
-    // double tap skip
-    if(now-lastTap<300){
-      const half=window.innerWidth/2;
-      if(startX<half){
-        player.seekTo(Math.max(0,player.getCurrentTime()-10),true);
-        showSeekHud(player.getCurrentTime()-10,player.getDuration(),-10);
-      }else{
-        player.seekTo(player.getCurrentTime()+10,true);
-        showSeekHud(player.getCurrentTime()+10,player.getDuration(),+10);
-      }
-      lastTap=0;
-    }else{
-      // single tap — trigger native controls visibility
+  if(!isReady) return;
+  const now = Date.now();
+
+  // small movement counts as tap
+  const touch = e.changedTouches[0];
+  const dx = touch.clientX - startX, dy = touch.clientY - startY;
+  const smallMove = Math.abs(dx) < 10 && Math.abs(dy) < 10;
+
+  if(gesture === 'seek'){
+    const dur = (player && player.getDuration) ? (player.getDuration()||0) : 0;
+    const cur = (player && player.getCurrentTime) ? (player.getCurrentTime()||0) : 0;
+    const delta = (dx / window.innerWidth) * SEEK_MAX * (1 + Math.abs(velocity * SEEK_VELOCITY_SCALE));
+    const dest = Math.max(0, Math.min(dur, cur + delta));
+    try { player.seekTo(dest, true); showSeekHUD(dest, dur, delta); } catch(e){}
+  } else if(smallMove){
+    if(now - lastTap < DOUBLE_TAP_THRESHOLD){
+      // double tap -> play/pause
+      try { const st = player.getPlayerState(); if(st === YT.PlayerState.PLAYING) player.pauseVideo(); else player.playVideo(); } catch(e){}
+      lastTap = 0;
+    } else {
+      // single tap -> show native controls and custom bar
+      // send a click event into the iframe area so native controls appear
+      showControls();
       try {
-        const evt = new MouseEvent('click', {bubbles:true,cancelable:true});
-        document.elementFromPoint(e.changedTouches[0].clientX, e.changedTouches[0].clientY)?.dispatchEvent(evt);
-      } catch(ex){}
-      lastTap=now;
+        // dispatch a click at tap location to underlying element (iframe)
+        const el = document.elementFromPoint(touch.clientX, touch.clientY);
+        if(el) el.dispatchEvent(new MouseEvent('click', {bubbles:true,cancelable:true,clientX:touch.clientX,clientY:touch.clientY}));
+      } catch(e){}
+      lastTap = now;
     }
   }
-  // reset playback speed
-  if(player.getPlaybackRate()>1)setTimeout(()=>player.setPlaybackRate(1),500);
-  gesture=null;
+  // reset playback rate if long-press changed it
+  try { if(player.getPlaybackRate && player.getPlaybackRate() > 1) setTimeout(()=>player.setPlaybackRate(1), 500); } catch(e){}
+  gesture = null;
+}, {passive:false});
+
+/* bottom controls wiring */
+btnPlay.addEventListener('click', ()=>{
+  try { const st = player.getPlayerState(); if(st === YT.PlayerState.PLAYING) player.pauseVideo(); else player.playVideo(); updatePlayBtn(); } catch(e){}
+  showControls();
 });
+function updatePlayBtn(){ try { btnPlay.textContent = player.getPlayerState() === YT.PlayerState.PLAYING ? '❚❚' : '▶︎'; } catch(e){ } }
+setInterval(()=>{ try{ updatePlayBtn(); } catch(e){} }, 500);
+
+let aspectMode = 0; // 0=fit,1=fill,2=zoom
+btnAspect.addEventListener('click', ()=>{
+  const p = document.getElementById('yt-player');
+  aspectMode = (aspectMode + 1) % 3;
+  if(aspectMode === 0){ p.style.objectFit = 'contain'; p.style.transform = 'scale(1)'; }
+  if(aspectMode === 1){ p.style.objectFit = 'cover'; p.style.transform = 'scale(1)'; }
+  if(aspectMode === 2){ p.style.objectFit = 'cover'; p.style.transform = 'scale(1.15)'; }
+  showControls();
+  try { if(player && player.setSize){ /* try setSize for iframe too */ player.setSize(window.innerWidth, window.innerHeight); } } catch(e){}
+});
+
+/* allow host to call functions by posting JSON messages */
+window.addEventListener('message', (ev) => {
+  try {
+    const data = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data;
+    if(data && data.cmd) {
+      // example: { cmd: 'seek', payload: 60 }
+      if(data.cmd === 'seek' && typeof data.payload === 'number') player.seekTo(data.payload, true);
+      if(data.cmd === 'play') player.playVideo();
+      if(data.cmd === 'pause') player.pauseVideo();
+    }
+  } catch(e){}
+});
+
+/* small safety: expose API to host via window.SoniqBridge */
+window.SoniqBridge = {
+  play: ()=>{ if(player) player.playVideo(); },
+  pause: ()=>{ if(player) player.pauseVideo(); },
+  seekTo: (sec)=>{ if(player) player.seekTo(sec, true); },
+  setVolume: (v)=>{ if(player) player.setVolume(v); },
+  getState: ()=> ({ ready: !!isReady })
+};
+
+/* notify host the HTML loaded */
+sendMessage('Loaded', { videoId, platform });
 </script>
 </body>
 </html>
